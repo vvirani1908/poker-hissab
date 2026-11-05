@@ -60,6 +60,10 @@
   .insight { padding:10px 12px; border-left:3px solid var(--accent); background:#12201a; border-radius:0 10px 10px 0; margin-bottom:8px; font-size:14px; }
   .bar { height:8px; border-radius:4px; background:#0f1a14; overflow:hidden; min-width:60px; } .bar i { display:block; height:100%; }
   .empty { text-align:center; padding:26px 12px; color:var(--mute); }
+  .owe { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#12201a; margin-bottom:8px; flex-wrap:wrap; }
+  .owe.me { border-color:#6b5513; } .owe .arrow { color:var(--accent); font-weight:700; } .owe .amt { margin-left:auto; font-weight:700; font-size:16px; }
+  .owe .names { flex:1 1 180px; min-width:0; word-break:break-word; }
+  .summary { padding:12px 14px; border-radius:12px; margin-bottom:12px; font-weight:600; background:#0f1a14; border:1px solid var(--line); }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
@@ -174,6 +178,41 @@ function barsSVG(history) {
   </svg>`;
 }
 
+
+// ---------- settle-up: who owes whom ----------
+function oweRow(t, sup) {
+  const meIn = t.from === D.user.id || t.to === D.user.id;
+  const who = t.from === D.user.id ? '<b>You</b>' : esc(t.fromName), whom = t.to === D.user.id ? '<b>you</b>' : esc(t.toName);
+  return `<div class="owe ${meIn ? 'me' : ''}"><div class="names">${who} <span class="arrow">owes</span> ${whom}</div><span class="amt">${money(t.amount)}</span>
+    ${sup ? `<button class="ghost sm" onclick="markPaid('${t.from}','${t.to}',${t.amount})">Mark paid</button>` : ''}</div>`;
+}
+function oweSummary() {
+  const mine = D.owe.settlements, owes = mine.filter(t => t.from === D.user.id).reduce((a, t) => a + t.amount, 0), owed = mine.filter(t => t.to === D.user.id).reduce((a, t) => a + t.amount, 0);
+  if (owes > 0 && owed > 0) return `<div class="summary">You owe <span class="loss">${money(owes)}</span> and you're owed <span class="win">${money(owed)}</span>.</div>`;
+  if (owes > 0) return `<div class="summary">You owe <span class="loss">${money(owes)}</span> in total.</div>`;
+  if (owed > 0) return `<div class="summary">You're owed <span class="win">${money(owed)}</span> in total.</div>`;
+  return D.highlights.games ? `<div class="summary win">✓ You're all square. Nobody owes you and you owe nobody.</div>` : '';
+}
+function oweCard(full) {
+  const O = D.owe, sup = D.isSuper, list = full ? O.settlements : O.settlements.filter(t => t.from === D.user.id || t.to === D.user.id);
+  return `<div class="card"><h2>💸 ${full ? 'Who owes whom' : 'Your settle-up'}</h2>
+    <div class="mute" style="font-size:13px;margin:-6px 0 12px">The fewest payments that square everyone up, based on every recorded night${O.payments.length ? ' and the payments already made' : ''}.</div>
+    ${oweSummary()}
+    ${list.length ? list.map(t => oweRow(t, sup)).join('') : `<p class="mute">${D.highlights.games ? (full ? 'Everyone is settled up. 🎉' : 'Nothing to settle.') : 'Nothing to settle yet. Balances appear after the first recorded night.'}</p>`}
+    ${Math.abs(O.unaccounted) > 0.009 ? `<div class="warn">Recorded cash-outs and buy-ins differ by ${money(Math.abs(O.unaccounted))}, so some money isn't accounted for in the games.</div>` : ''}
+    ${full && O.payments.length ? `<details style="margin-top:10px"><summary class="mute">Recent payments (${O.payments.length})</summary>
+      ${O.payments.map(p => `<div class="owe" style="margin:6px 0"><div class="names">${esc(p.fromName)} <span class="arrow">paid</span> ${esc(p.toName)} <span class="mute">· ${fmtDate(p.date)}</span></div><span class="amt">${money(p.amount)}</span>
+        ${sup ? `<button class="ghost sm" onclick="undoPayment('${p.id}')">Undo</button>` : ''}</div>`).join('')}</details>` : ''}</div>`;
+}
+async function markPaid(from, to, amount) {
+  const v = prompt('Amount that was paid:', amount);
+  if (v === null) return;
+  const n = Number(v);
+  if (!(n > 0)) return alert('Enter an amount greater than 0');
+  try { await api('POST', '/api/payments', { from, to, amount: n }); route(); } catch (e) { alert(e.message); }
+}
+async function undoPayment(id) { if (confirm('Undo this payment?')) { await api('DELETE', '/api/payments/' + id); route(); } }
+
 // ---------- HOME: events, leaderboard, lobby highlights ----------
 function podiumHTML(st) {
   const top = st.slice(0, 3); if (!top.length) return '';
@@ -190,6 +229,8 @@ function homePage() {
       ${st.length ? podiumHTML(st) : ''}
       <table><tr><th>#</th><th>Player</th><th>Nights</th><th>Win rate</th><th>Net</th></tr>
       ${st.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${p.games}</td><td>${p.games ? Math.round(100 * p.wins / p.games) + '%' : '—'}</td><td><b>${signed(p.net)}</b></td></tr>`).join('')}</table></div>
+
+    ${oweCard(true)}
 
     <div class="card"><h2>📊 The lobby so far</h2>
       <div class="grid">
@@ -251,6 +292,8 @@ function portfolioPage() {
       ${n ? `<div style="margin-top:12px"><div class="mute" style="font-size:12px;margin-bottom:6px">LAST ${form.length} NIGHT${form.length === 1 ? '' : 'S'}</div><div class="formdots">${form.map(h => `<span class="fd ${h.net > 0 ? 'w' : h.net < 0 ? 'l' : 'p'}" title="${fmtDate(h.date)}">${h.net > 0 ? '+' : ''}${money(h.net)}</span>`).join('')}</div></div>` : ''}</div>
 
     ${mine.length ? `<div class="card"><h2>📅 You're in</h2>${mine.map(e => `<div class="ev" style="margin:0 0 8px"><b>${esc(e.title)}</b> ${e.status === 'live' ? '<span class="loss"><span class="dot"></span>live now</span>' : ''}<div class="mute">${evWhen(e)}${e.location ? ' · ' + esc(e.location) : ''} · your buy-in ${money(e.players.find(p => p.userId === D.user.id).total)}</div></div>`).join('')}</div>` : ''}
+
+    ${oweCard(false)}
 
     <div class="card"><h2>📈 Bankroll over time</h2><div class="mute" style="font-size:13px">Running total of your wins and losses</div>${chartSVG(hist)}</div>
     ${n ? `<div class="card"><h2>📊 Night by night</h2>${barsSVG(hist)}</div>` : ''}

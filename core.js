@@ -176,6 +176,7 @@ route('GET', '/api/home', ({ user }) => {
   };
   const out = { user: pub(user), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
   out.highlights = highlights(l);
+  out.owe = oweView(l);
   out.events = eventsList().filter(e => e.status === 'upcoming' || e.status === 'live')
     .sort((a, b) => (a.status === 'live' ? -1 : 0) - (b.status === 'live' ? -1 : 0) || (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
     .map(e => evView(e, user.id));
@@ -186,14 +187,14 @@ route('GET', '/api/home', ({ user }) => {
 // Backup / restore (super user). The backup contains password hashes, so keep the file private.
 route('GET', '/api/backup', ({ user }) => {
   needSuper(user);
-  return { users: db.users, lobbies: db.lobbies, sessions: db.sessions, events: eventsList() };
+  return { users: db.users, lobbies: db.lobbies, sessions: db.sessions, events: eventsList(), payments: db.payments || [] };
 }, 'any');
 route('POST', '/api/restore', ({ user, body }) => {
   needSuper(user);
   if (!Array.isArray(body.users) || !Array.isArray(body.lobbies) || !Array.isArray(body.sessions)
       || !body.users.some(u => u.id === user.id) || !body.lobbies.some(l => l.ownerId === user.id))
     throw new HttpError(400, 'Not a valid backup for this account');
-  db = { users: body.users, lobbies: body.lobbies, sessions: body.sessions, events: Array.isArray(body.events) ? body.events : [], tokens: db.tokens };
+  db = { users: body.users, lobbies: body.lobbies, sessions: body.sessions, events: Array.isArray(body.events) ? body.events : [], payments: Array.isArray(body.payments) ? body.payments : [], tokens: db.tokens };
   save();
   return { ok: true };
 }, 'any');
@@ -335,6 +336,57 @@ route('POST', '/api/events/:id/finish', ({ user, params, body }) => {
   db.sessions.push(s);
   e.status = 'finished'; e.sessionId = s.id; e.finishedAt = Date.now(); save();
   return { ok: true, sessionId: s.id };
+}, 'any');
+
+
+// ---------- settle-up: who owes whom ----------
+const round2 = n => Math.round(n * 100) / 100;
+// balance > 0: the lobby owes this player; balance < 0: this player owes the lobby. Payments move balances toward zero.
+function balancesFor(l) {
+  const bal = {}; l.members.forEach(id => bal[id] = 0);
+  for (const s of db.sessions) if (s.lobbyId === l.id) for (const e of s.entries) if (e.userId in bal) bal[e.userId] += e.cashOut - e.buyIn;
+  for (const p of (db.payments || [])) { if (p.from in bal) bal[p.from] += p.amount; if (p.to in bal) bal[p.to] -= p.amount; }
+  Object.keys(bal).forEach(k => bal[k] = round2(bal[k]));
+  return bal;
+}
+// Fewest payments: repeatedly match the biggest debtor with the biggest creditor.
+function settleUp(bal) {
+  const cr = [], dr = [];
+  for (const [id, v] of Object.entries(bal)) { if (v > 0.004) cr.push({ id, v }); else if (v < -0.004) dr.push({ id, v: -v }); }
+  cr.sort((a, b) => b.v - a.v); dr.sort((a, b) => b.v - a.v);
+  const out = []; let i = 0, j = 0;
+  while (i < dr.length && j < cr.length) {
+    const amt = Math.min(dr[i].v, cr[j].v);
+    out.push({ from: dr[i].id, to: cr[j].id, amount: round2(amt) });
+    dr[i].v -= amt; cr[j].v -= amt;
+    if (dr[i].v < 0.005) i++;
+    if (cr[j].v < 0.005) j++;
+  }
+  return out;
+}
+function oweView(l) {
+  const name = id => (db.users.find(u => u.id === id) || {}).name || 'Removed player';
+  const bal = balancesFor(l);
+  const settlements = settleUp(bal).map(t => ({ ...t, fromName: name(t.from), toName: name(t.to) }));
+  const payments = (db.payments || []).filter(p => p.lobbyId === l.id).sort((a, b) => b.created - a.created).slice(0, 8)
+    .map(p => ({ id: p.id, from: p.from, to: p.to, amount: p.amount, date: p.date, fromName: name(p.from), toName: name(p.to) }));
+  return { settlements, payments, unaccounted: round2(Object.values(bal).reduce((a, v) => a + v, 0)) };
+}
+
+route('POST', '/api/payments', ({ user, body }) => {
+  const l = needSuper(user);
+  if (body.from === body.to) throw new HttpError(400, 'Pick two different players');
+  if (!l.members.includes(body.from) || !l.members.includes(body.to)) throw new HttpError(400, 'Both must be players in the lobby');
+  const amount = posNum(body.amount);
+  if (amount > 1e7) throw new HttpError(400, 'Amount too large');
+  const pay = { id: uid(), lobbyId: l.id, from: body.from, to: body.to, amount: round2(amount), date: new Date().toISOString().slice(0, 10), created: Date.now() };
+  (db.payments = db.payments || []).push(pay); save();
+  return { ok: true, id: pay.id };
+}, 'any');
+route('DELETE', '/api/payments/:id', ({ user, params }) => {
+  needSuper(user);
+  db.payments = (db.payments || []).filter(p => p.id !== params.id); save();
+  return { ok: true };
 }, 'any');
 
 // ---------- request handling ----------
