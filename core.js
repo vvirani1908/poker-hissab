@@ -237,17 +237,21 @@ const eventsList = () => (db.events = db.events || []);
 const findEvent = id => { const e = eventsList().find(x => x.id === id); if (!e) throw new HttpError(404, 'Event not found'); return e; };
 const money = n => '$' + (Math.round(n * 100) / 100).toLocaleString('en-US');
 const posNum = v => { const n = Number(v); if (!isFinite(n) || n <= 0) throw new HttpError(400, 'Enter an amount greater than 0'); return n; };
+const addLog = (e, type, userId, by, amount) => { (e.log = e.log || []).push({ at: Date.now(), type, userId, by, amount }); };
 const playerTotals = p => { const rebuys = (p.rebuys || []).reduce((a, r) => a + r.amount, 0); return { rebuys, total: p.buyIn + rebuys }; };
 function evView(e, userId) {
   const players = e.players.map(p => {
     const u = db.users.find(x => x.id === p.userId);
-    return { userId: p.userId, name: u ? u.name : 'Removed player', buyIn: p.buyIn, ...playerTotals(p), joinedAt: p.joinedAt };
+    const rb = p.rebuys || [];
+    return { userId: p.userId, name: u ? u.name : 'Removed player', buyIn: p.buyIn, ...playerTotals(p), joinedAt: p.joinedAt, lastRebuy: rb.length ? rb[rb.length - 1].amount : 0 };
   });
+  const nm = id => (db.users.find(x => x.id === id) || {}).name || 'Removed player';
+  const log = (e.log || []).slice(-15).reverse().map(l => ({ at: l.at, type: l.type, amount: l.amount, who: nm(l.userId), by: l.by && l.by !== l.userId ? nm(l.by) : null }));
   return {
     id: e.id, title: e.title, date: e.date, time: e.time, location: e.location, minBuyIn: e.minBuyIn, maxSeats: e.maxSeats,
     status: e.status, startedAt: e.startedAt, players, pot: players.reduce((a, p) => a + p.total, 0),
     seatsLeft: e.maxSeats ? Math.max(0, e.maxSeats - players.length) : null,
-    joined: players.some(p => p.userId === userId),
+    joined: players.some(p => p.userId === userId), log,
   };
 }
 
@@ -289,7 +293,7 @@ route('POST', '/api/events/:id/join', ({ user, params, body }) => {
   const buyIn = posNum(body.buyIn);
   if (buyIn < e.minBuyIn) throw new HttpError(400, `Minimum buy-in is ${money(e.minBuyIn)}`);
   if (e.maxSeats && e.players.length >= e.maxSeats) throw new HttpError(400, 'No seats left');
-  e.players.push({ userId: user.id, buyIn, rebuys: [], joinedAt: Date.now() }); save();
+  e.players.push({ userId: user.id, buyIn, rebuys: [], joinedAt: Date.now() }); addLog(e, 'join', user.id, user.id, buyIn); save();
   return evView(e, user.id);
 }, 'any');
 
@@ -319,13 +323,42 @@ route('POST', '/api/events/:id/start', ({ user, params }) => {
   return evView(e, user.id);
 }, 'any');
 
+// A player can manage their own entry; the super user can manage anyone's. Everything is written to the activity log.
+const entryTarget = (user, e, body) => {
+  const uidTarget = body && body.userId ? body.userId : user.id;
+  const isSuperUser = needSuperSoft(user);
+  if (uidTarget !== user.id && !isSuperUser) throw new HttpError(403, 'You can only change your own entry');
+  const p = e.players.find(x => x.userId === uidTarget);
+  if (!p) throw new HttpError(404, uidTarget === user.id ? "You haven't joined this session" : 'Player not in this session');
+  return p;
+};
+const needSuperSoft = user => { const l = theLobby(); return !!l && l.ownerId === user.id; };
+
 route('POST', '/api/events/:id/rebuy', ({ user, params, body }) => {
-  needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status !== 'live') throw new HttpError(400, 'Rebuys open once the session is live');
+  const p = entryTarget(user, e, body);
+  const amount = posNum(body.amount);
+  (p.rebuys = p.rebuys || []).push({ amount, at: Date.now() }); addLog(e, 'rebuy', p.userId, user.id, amount); save();
+  return evView(e, user.id);
+}, 'any');
+
+route('DELETE', '/api/events/:id/rebuy/last', ({ user, params, body }) => {
   const e = findEvent(params.id);
   if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
-  const p = e.players.find(x => x.userId === body.userId);
-  if (!p) throw new HttpError(404, 'Player not in this session');
-  (p.rebuys = p.rebuys || []).push({ amount: posNum(body.amount), at: Date.now() }); save();
+  const p = entryTarget(user, e, body);
+  if (!(p.rebuys || []).length) throw new HttpError(400, 'No rebuy to undo');
+  const last = p.rebuys.pop(); addLog(e, 'undo', p.userId, user.id, last.amount); save();
+  return evView(e, user.id);
+}, 'any');
+
+route('PUT', '/api/events/:id/entry', ({ user, params, body }) => {
+  const e = findEvent(params.id);
+  if (e.status !== 'upcoming' && e.status !== 'live') throw new HttpError(400, 'This event is closed');
+  const p = entryTarget(user, e, body);
+  const buyIn = posNum(body.buyIn);
+  if (buyIn < e.minBuyIn) throw new HttpError(400, `Minimum buy-in is ${money(e.minBuyIn)}`);
+  const old = p.buyIn; p.buyIn = buyIn; addLog(e, 'edit', p.userId, user.id, buyIn); save();
   return evView(e, user.id);
 }, 'any');
 

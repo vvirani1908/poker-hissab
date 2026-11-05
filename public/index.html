@@ -520,7 +520,8 @@ function joinBox(e) {
   if (e.joined) {
     const mine = e.players.find(p => p.userId === D.user.id);
     return `<p style="margin:10px 0 0"><span class="win">✓ You're in</span> with ${money(mine.total)}
-      ${e.status === 'upcoming' ? `<button class="ghost sm" onclick="leaveEvent('${e.id}')" style="margin-left:8px">Leave</button>` : ''}</p>`;
+      <button class="ghost sm" onclick="editEntry('${e.id}','${D.user.id}')" style="margin-left:8px">Edit buy-in</button>
+      ${e.status === 'upcoming' ? `<button class="ghost sm" onclick="leaveEvent('${e.id}')">Leave</button>` : ''}</p>`;
   }
   if (e.seatsLeft === 0) return '<p class="mute" style="margin:10px 0 0">No seats left.</p>';
   return `<div style="margin-top:10px"><div class="row"><input type="number" id="jb-${e.id}" min="${e.minBuyIn}" step="any" value="${e.minBuyIn || ''}" placeholder="Your buy-in" style="max-width:160px;flex:0 1 160px">
@@ -537,14 +538,21 @@ function eventHTML(e, sup) {
         <div style="text-align:right"><div class="stat" style="padding:8px 12px"><small>Min buy-in</small><b style="font-size:18px">${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div></div>`;
   const stats = live
     ? `<div class="grid" style="margin-top:12px"><div class="stat"><small>Pot</small><b>${money(e.pot)}</b></div><div class="stat"><small>Players</small><b>${e.players.length}</b></div><div class="stat"><small>Min buy-in</small><b>${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div>` : '';
-  const table = live ? `<table style="margin-top:12px"><tr><th>Player</th><th>Buy-in</th><th>Rebuys</th><th>Total</th>${sup ? '<th></th>' : ''}</tr>
-      ${e.players.map(p => `<tr><td>${esc(p.name)}${p.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${money(p.buyIn)}</td><td>${p.rebuys ? money(p.rebuys) : '—'}</td><td><b>${money(p.total)}</b></td>
-        ${sup ? `<td style="white-space:nowrap"><input type="number" id="rb-${e.id}-${p.userId}" min="1" placeholder="Rebuy $" style="width:84px;padding:4px"> <button class="ghost sm" onclick="rebuy('${e.id}','${p.userId}')">+</button> <a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">✕</a></td>` : ''}</tr>`).join('')}</table>`
+  const canAct = p => sup || p.userId === D.user.id;
+  const table = live ? `<table style="margin-top:12px"><tr><th>Player</th><th>Buy-in</th><th>Rebuys</th><th>Total</th></tr>
+      ${e.players.map(p => `<tr><td>${esc(p.name)}${p.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${money(p.buyIn)}</td><td>${p.rebuys ? money(p.rebuys) : '—'}</td><td><b>${money(p.total)}</b></td></tr>
+        ${canAct(p) ? `<tr><td colspan="4" style="text-align:left;padding-top:2px"><div class="row" style="gap:6px">
+          <input type="number" id="rb-${e.id}-${p.userId}" min="1" step="any" placeholder="Rebuy $" style="width:100px;flex:0 0 100px;padding:6px">
+          <button class="sm" onclick="rebuy('${e.id}','${p.userId}')">Rebuy</button>
+          <button class="ghost sm" onclick="editEntry('${e.id}','${p.userId}')">Edit buy-in</button>
+          ${p.lastRebuy ? `<button class="ghost sm" onclick="undoRebuy('${e.id}','${p.userId}')">Undo last rebuy (${money(p.lastRebuy)})</button>` : ''}
+          ${sup && p.userId !== D.user.id ? `<a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">Remove</a>` : ''}</div></td></tr>` : ''}`).join('')}</table>
+      ${e.log && e.log.length ? `<details style="margin-top:8px"><summary class="mute" style="font-size:13px">Activity (${e.log.length})</summary>${e.log.map(l => `<div class="mute" style="font-size:12.5px;padding:3px 0">${new Date(l.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · <b style="color:var(--text)">${esc(l.who)}</b> ${{ join: 'joined with', rebuy: 'rebought', edit: 'set buy-in to', undo: 'undid a rebuy of' }[l.type]} ${money(l.amount)}${l.by ? ` <i>(by ${esc(l.by)})</i>` : ''}</div>`).join('')}</details>` : ''}`
     : `<div class="chips">${chips}</div><div class="mute" style="font-size:13px">${e.players.length} joined${e.seatsLeft !== null ? ` · ${e.seatsLeft} seat${e.seatsLeft === 1 ? '' : 's'} left` : ''}</div>`;
   const supBtns = sup ? `<div class="row" style="margin-top:12px">${live
     ? `<button onclick="openSettle('${e.id}')">End session &amp; enter cash-outs</button>`
-    : `<button onclick="startEvent('${e.id}')">Start session</button><button class="danger sm" onclick="cancelEvent('${e.id}')">Cancel event</button>`}</div><p class="err" id="se-${e.id}"></p><div id="settle-${e.id}"></div>` : '';
-  return `<div class="card ${live ? 'live' : ''}">${head}${stats}${table}${joinBox(e)}${supBtns}</div>`;
+    : `<button onclick="startEvent('${e.id}')">Start session</button><button class="danger sm" onclick="cancelEvent('${e.id}')">Cancel event</button>`}</div><div id="settle-${e.id}"></div>` : '';
+  return `<div class="card ${live ? 'live' : ''}">${head}${stats}${table}${joinBox(e)}<p class="err" id="se-${e.id}"></p>${supBtns}</div>`;
 }
 function eventsHTML() {
   const evs = (D && D.events) || [];
@@ -567,7 +575,20 @@ async function cancelEvent(id) { if (confirm('Cancel this event?')) { await api(
 async function removePlayer(id, u) { if (confirm('Remove this player from the event?')) { await api('DELETE', `/api/events/${id}/players/${u}`); refreshEvents(); } }
 async function rebuy(id, u) {
   const amt = +$(`#rb-${id}-${u}`).value;
+  if (!(amt > 0)) return $('#se-' + id).textContent = 'Enter the rebuy amount first';
   try { await api('POST', `/api/events/${id}/rebuy`, { userId: u, amount: amt }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
+}
+async function editEntry(id, u) {
+  const e = D.events.find(x => x.id === id), p = e.players.find(x => x.userId === u);
+  const v = prompt(`New buy-in amount${e.minBuyIn ? ` (minimum ${money(e.minBuyIn)})` : ''}. Rebuys are kept separately.`, p.buyIn);
+  if (v === null) return;
+  const n = Number(v);
+  if (!(n > 0)) return alert('Enter an amount greater than 0');
+  try { await api('PUT', `/api/events/${id}/entry`, { userId: u, buyIn: n }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
+}
+async function undoRebuy(id, u) {
+  if (!confirm('Undo the last rebuy?')) return;
+  try { await api('DELETE', `/api/events/${id}/rebuy/last`, { userId: u }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
 }
 function openSettle(id) {
   const e = D.events.find(x => x.id === id), box = $('#settle-' + id);
