@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Hissab</title>
+<style>
+  :root { --bg:#0f1a14; --card:#17261d; --line:#254033; --text:#e8f1ec; --mute:#8fa89a; --accent:#f2c14e; --win:#4ade80; --loss:#f87171; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:18px; margin:0; cursor:pointer; } header h1 span { color:var(--accent); }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { margin:0 0 12px; font-size:16px; } h3 { margin:0 0 8px; font-size:14px; color:var(--mute); font-weight:600; }
+  input, select { background:#0f1a14; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; width:100%; }
+  input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  button { background:var(--accent); color:#1b1500; border:0; border-radius:8px; padding:9px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  button.danger { background:transparent; color:var(--loss); border:1px solid var(--loss); }
+  button.sm { padding:4px 9px; font-size:13px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; } .row > input { flex:1; min-width:120px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .stat { background:#0f1a14; border-radius:10px; padding:12px; } .stat b { display:block; font-size:22px; } .stat small { color:var(--mute); }
+  table { width:100%; border-collapse:collapse; } th,td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); } th:first-child,td:first-child { text-align:left; } th { color:var(--mute); font-weight:600; font-size:13px; }
+  .win { color:var(--win); } .loss { color:var(--loss); } .mute { color:var(--mute); }
+  .code { font:700 22px ui-monospace,monospace; letter-spacing:3px; color:var(--accent); background:#0f1a14; padding:6px 12px; border-radius:8px; }
+  .lobby-item { display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid var(--line); border-radius:10px; margin-bottom:8px; cursor:pointer; }
+  .lobby-item:hover { border-color:var(--accent); }
+  .err { color:var(--loss); min-height:1.2em; margin:8px 0 0; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { background:transparent; color:var(--mute); border:1px solid var(--line); } .tabs button.on { background:var(--accent); color:#1b1500; }
+  .login { max-width:360px; margin:8vh auto 0; } .login input { margin-bottom:10px; }
+  input[type=checkbox] { width:auto; vertical-align:middle; margin-right:6px; }
+  td input { text-align:right; padding:6px; min-width:70px; }
+  .warn { background:#3a2a0a; border:1px solid var(--accent); border-radius:8px; padding:8px 10px; margin-top:10px; font-size:13px; }
+  .hero { text-align:center; padding:8px 0 4px; } .hero .big { font-size:44px; font-weight:700; letter-spacing:-1px; } .hero small { color:var(--mute); }
+  .chart { width:100%; height:auto; display:block; margin-top:8px; } .chart text { fill:var(--mute); font-size:11px; }
+  .pill { display:inline-block; background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12px; color:var(--mute); }
+  details summary { cursor:pointer; padding:8px 0; }
+</style>
+</head>
+<body>
+<header><h1 onclick="route()">♠ Poker <span>Hissab</span></h1><div id="who"></div></header>
+<main id="app"></main>
+
+<script>
+const $ = s => document.querySelector(s);
+const app = $('#app');
+let token = localStorage.getItem('token'), me = null, D = null;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n * 100) / 100).toLocaleString('en-US');
+const signed = n => `<span class="${n > 0 ? 'win' : n < 0 ? 'loss' : 'mute'}">${n > 0 ? '+' : ''}${money(n)}</span>`;
+const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { if (r.status === 401 && token) logoutLocal(); throw new Error(j.error || 'Request failed'); }
+  return j;
+}
+function logoutLocal() { token = null; me = null; localStorage.removeItem('token'); route(); }
+async function logout() { try { await api('POST', '/api/logout'); } catch {} logoutLocal(); }
+const setErr = m => { const e = $('#err'); if (e) e.textContent = m || ''; };
+
+async function route() {
+  if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
+  $('#who').innerHTML = me ? `${esc(me.name)} ${me.role === 'super' ? '<span class="pill">super user</span>' : ''} <button class="ghost sm" onclick="logout()">Log out</button>` : '';
+  if (!me) return loginView();
+  return dashboard();
+}
+
+// ---------- sign in / create account ----------
+async function loginView(mode = 'login') {
+  const reg = mode === 'register';
+  const st = reg ? await api('GET', '/api/status') : null;
+  app.innerHTML = `<div class="card login">
+    <h2 style="text-align:center;font-size:20px">${reg ? 'Create account' : 'Sign in'}</h2>
+    ${reg ? `<input id="name" placeholder="Your name">` : ''}
+    <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
+    <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
+    <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
+    ${reg ? (st.hasLobby
+      ? `<input id="code" placeholder="Lobby code (from the super user)" style="text-transform:uppercase" autocapitalize="characters" autocomplete="off">`
+      : `<div class="warn" style="margin:0 0 10px">You're the first one here, so you'll be the <b>super user</b> and set up the lobby.</div><input id="lobbyName" placeholder="Lobby name (e.g. Friday Night Poker)">`) : ''}
+    <button style="width:100%" id="go">${reg ? 'Create account' : 'Sign in'}</button><p class="err" id="err"></p>
+    <p class="mute" style="text-align:center;font-size:14px;margin-bottom:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
+  </div>`;
+  $('#sw').onclick = e => { e.preventDefault(); loginView(reg ? 'login' : 'register'); };
+  $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
+  const go = async () => {
+    try {
+      const body = { username: $('#user').value, password: $('#pw').value };
+      if (reg) { body.name = $('#name').value; if ($('#code')) body.code = $('#code').value; if ($('#lobbyName')) body.lobbyName = $('#lobbyName').value; }
+      const r = await api('POST', reg ? '/api/register' : '/api/login', body);
+      token = r.token; me = r.user; localStorage.setItem('token', token); route();
+    } catch (e) { setErr(e.message); }
+  };
+  $('#go').onclick = go;
+  $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+  (reg ? $('#name') : $('#user')).focus();
+}
+
+// ---------- chart: cumulative profit/loss by night ----------
+function chartSVG(history) {
+  if (!history.length) return '<p class="mute" style="text-align:center">Your chart appears after your first game.</p>';
+  const W = 640, H = 230, L = 52, R = 14, T = 14, B = 28;
+  const pts = [{ date: null, v: 0 }, ...history.map(h => ({ date: h.date, v: h.cumulative, net: h.net }))];
+  let lo = Math.min(0, ...pts.map(p => p.v)), hi = Math.max(0, ...pts.map(p => p.v));
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+  const x = i => L + (pts.length === 1 ? 0 : i * (W - L - R) / (pts.length - 1));
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const last = pts[pts.length - 1].v, col = last >= 0 ? 'var(--win)' : 'var(--loss)';
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(pts.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`;
+  const ticks = [lo + pad, 0, hi - pad].filter((v, i, a) => a.indexOf(v) === i);
+  const step = Math.ceil(pts.length / 6);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative profit and loss by game night">
+    ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? '#4d6b5b' : '#254033'}" ${t === 0 ? '' : 'stroke-dasharray="3 4"'}/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${money(Math.round(t))}</text>`).join('')}
+    <path d="${area}" fill="${col}" opacity=".13"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>
+    ${pts.map((p, i) => i ? `<circle cx="${x(i)}" cy="${y(p.v)}" r="5" fill="${col}" stroke="#17261d" stroke-width="2"><title>${fmtDate(p.date)}: ${p.net > 0 ? '+' : ''}${money(p.net)} (total ${money(p.v)})</title></circle>` : '').join('')}
+    ${pts.map((p, i) => i && (i - 1) % step === 0 ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${new Date(p.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>` : '').join('')}
+  </svg>`;
+}
+
+// ---------- dashboard ----------
+async function dashboard() {
+  try { D = await api('GET', '/api/home'); } catch (e) { app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  const m = D.me, sup = D.isSuper, hist = [...m.history].reverse();
+  const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
+
+  app.innerHTML = `
+    <div class="card"><div class="hero"><small>Your overall earnings · ${esc(D.lobby.name)}</small>
+      <div class="big">${signed(m.net)}</div>
+      <small>${m.games ? `${m.games} night${m.games === 1 ? '' : 's'} played · won ${m.wins}, lost ${m.games - m.wins}` : 'No games played yet'}</small></div>
+      ${chartSVG(m.history)}
+      <div class="grid" style="margin-top:14px">
+        <div class="stat"><small>Total start (in)</small><b>${money(m.buyIn)}</b></div>
+        <div class="stat"><small>Total end (out)</small><b>${money(m.cashOut)}</b></div>
+        <div class="stat"><small>Best night</small><b>${signed(m.best)}</b></div>
+        <div class="stat"><small>Worst night</small><b>${signed(m.worst)}</b></div></div></div>
+
+    <div class="card"><h2>Your game history</h2>
+      ${hist.length ? `<table><tr><th>Date</th><th>Start</th><th>End</th><th>Won / lost</th></tr>
+        ${hist.map(h => `<tr><td>${fmtDate(h.date)}${h.note ? `<div class="mute" style="font-size:12px">${esc(h.note)}</div>` : ''}</td><td>${money(h.buyIn)}</td><td>${money(h.cashOut)}</td><td><b>${signed(h.net)}</b></td></tr>`).join('')}</table>`
+        : '<p class="mute">Nothing yet. Your nights will show up here once the super user records a game you played in.</p>'}</div>
+
+    <div class="card"><h2>Leaderboard</h2>
+      <table><tr><th>Player</th><th>Games</th><th>Net</th></tr>
+      ${D.standings.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${p.games}</td><td><b>${signed(p.net)}</b></td></tr>`).join('')}</table></div>
+
+    ${sup ? `
+    <h2 style="margin:28px 0 12px;color:var(--accent)">Super user controls</h2>
+    <div class="card"><div class="row" style="justify-content:space-between"><b>Invite players</b>
+      <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="sm" id="sh">Share</button></div></div>
+      <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account” and enter the code.</p>
+      <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div></div>
+
+    <div class="card"><h2 id="formTitle">Record a poker night</h2><div id="sform"></div></div>
+
+    <div class="card"><h2>Backup</h2><p class="mute" style="margin-top:0;font-size:13px">Download all players and games as a file. Keep it private (it holds password hashes). You can restore it here later.</p>
+      <div class="row"><button class="ghost" id="bk">Download backup</button><label class="ghost" style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 14px">Restore from file<input type="file" id="rs" accept=".json" hidden></label></div><p class="err" id="err3"></p></div>
+
+    <div class="card"><h2>All games</h2>
+      ${D.sessions.length ? D.sessions.map(s => `<details><summary><b>${fmtDate(s.date)}</b> ${s.note ? '— ' + esc(s.note) : ''} <span class="mute">· pot ${money(s.totalIn)}</span></summary>
+        <table><tr><th>Player</th><th>Start</th><th>End</th><th>Net</th></tr>
+        ${s.entries.map(e => `<tr><td>${esc(nameOf(e.userId))}</td><td>${money(e.buyIn)}</td><td>${money(e.cashOut)}</td><td>${signed(e.cashOut - e.buyIn)}</td></tr>`).join('')}</table>
+        ${Math.abs(s.totalIn - s.totalOut) > 0.001 ? `<div class="warn">In/out differ by ${money(s.totalIn - s.totalOut)}</div>` : ''}
+        <div class="row" style="margin-top:8px"><button class="ghost sm" onclick="editSession('${s.id}')">Edit</button><button class="danger sm" onclick="delSession('${s.id}')">Delete</button></div></details>`).join('') : '<p class="mute">No games recorded yet.</p>'}</div>` : ''}`;
+
+  if (!sup) return;
+  const msg = `Join my poker lobby "${D.lobby.name}" — code: ${D.lobby.code}\n${location.origin}`;
+  $('#cp').onclick = () => { navigator.clipboard?.writeText(D.lobby.code); $('#cp').textContent = 'Copied ✓'; };
+  $('#sh').onclick = async () => {
+    if (navigator.share) { try { await navigator.share({ title: D.lobby.name, text: msg }); } catch {} }
+    else { navigator.clipboard?.writeText(msg); $('#sh').textContent = 'Message copied ✓'; }
+  };
+  $('#bk').onclick = async () => {
+    const data = await api('GET', '/api/backup');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    a.download = `poker-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  };
+  $('#rs').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!confirm('Replace ALL current data with this backup?')) return;
+    try { await api('POST', '/api/restore', JSON.parse(await f.text())); dashboard(); } catch (x) { $('#err3').textContent = x.message; }
+  };
+  sessionForm(null);
+}
+
+function sessionForm(s) {
+  const rows = D.members.map(m => {
+    const e = s ? s.entries.find(x => x.userId === m.id) : null;
+    return `<tr data-u="${m.id}"><td><input type="checkbox" class="pl" ${!s || e ? 'checked' : ''}> ${esc(m.name)}</td>
+      <td><input type="number" min="0" step="any" class="bi" value="${e ? e.buyIn : ''}" placeholder="0"></td>
+      <td><input type="number" min="0" step="any" class="co" value="${e ? e.cashOut : ''}" placeholder="0"></td><td class="net">—</td></tr>`;
+  }).join('');
+  $('#formTitle').textContent = s ? 'Edit game' : 'Record a poker night';
+  $('#sform').innerHTML = `
+    <div class="row" style="margin-bottom:10px"><input type="date" id="sdate" value="${s ? s.date : new Date().toISOString().slice(0, 10)}" style="max-width:170px"><input id="snote" placeholder="Note (optional)" value="${s ? esc(s.note) : ''}"></div>
+    <table><tr><th>Player</th><th>Start (in)</th><th>End (out)</th><th>Net</th></tr>${rows}
+      <tr><td><b>Total</b></td><td id="tin">—</td><td id="tout">—</td><td id="tnet">—</td></tr></table>
+    <div id="chk"></div>
+    <div class="row" style="margin-top:12px"><button id="ssave">${s ? 'Save changes' : 'Save game'}</button>${s ? '<button class="ghost" id="scancel">Cancel</button>' : ''}</div><p class="err" id="err"></p>`;
+  const calc = () => {
+    let ti = 0, to = 0;
+    document.querySelectorAll('#sform tr[data-u]').forEach(tr => {
+      const on = tr.querySelector('.pl').checked;
+      const bi = +tr.querySelector('.bi').value || 0, co = +tr.querySelector('.co').value || 0;
+      tr.querySelector('.net').innerHTML = on ? signed(co - bi) : '—';
+      if (on) { ti += bi; to += co; }
+    });
+    $('#tin').textContent = money(ti); $('#tout').textContent = money(to); $('#tnet').innerHTML = signed(to - ti);
+    $('#chk').innerHTML = Math.abs(ti - to) > 0.001 ? `<div class="warn">Total in and out differ by ${money(Math.abs(ti - to))} — ${to > ti ? 'cash-outs exceed buy-ins' : 'some chips unaccounted for'}.</div>` : (ti ? '<div class="win" style="margin-top:8px">✓ Balanced</div>' : '');
+  };
+  $('#sform').oninput = calc; $('#sform').onchange = calc; calc();
+  if (s) $('#scancel').onclick = () => sessionForm(null);
+  $('#ssave').onclick = async () => {
+    const entries = [...document.querySelectorAll('#sform tr[data-u]')].filter(tr => tr.querySelector('.pl').checked)
+      .map(tr => ({ userId: tr.dataset.u, buyIn: +tr.querySelector('.bi').value || 0, cashOut: +tr.querySelector('.co').value || 0 }));
+    if (!entries.length) return setErr('Select at least one player');
+    try {
+      const body = { date: $('#sdate').value, note: $('#snote').value, entries };
+      if (s) await api('PUT', '/api/sessions/' + s.id, body); else await api('POST', '/api/sessions', body);
+      dashboard();
+    } catch (e) { setErr(e.message); }
+  };
+}
+function editSession(sid) { sessionForm(D.sessions.find(x => x.id === sid)); $('#formTitle').scrollIntoView({ behavior: 'smooth' }); }
+async function delSession(sid) { if (confirm('Delete this game?')) { await api('DELETE', '/api/sessions/' + sid); dashboard(); } }
+async function rmMember(u) { if (confirm('Remove this player? Their past games stop counting.')) { await api('DELETE', '/api/members/' + u); dashboard(); } }
+
+route();
+</script>
+</body>
+</html>
