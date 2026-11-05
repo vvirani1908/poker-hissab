@@ -155,6 +155,9 @@ route('GET', '/api/home', ({ user }) => {
     history,
   };
   const out = { user: pub(user), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
+  out.events = eventsList().filter(e => e.status === 'upcoming' || e.status === 'live')
+    .sort((a, b) => (a.status === 'live' ? -1 : 0) - (b.status === 'live' ? -1 : 0) || (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
+    .map(e => evView(e, user.id));
   if (isSuper) { out.lobby.code = l.code; out.sessions = v.sessions; }
   return out;
 }, 'any');
@@ -162,14 +165,14 @@ route('GET', '/api/home', ({ user }) => {
 // Backup / restore (super user). The backup contains password hashes, so keep the file private.
 route('GET', '/api/backup', ({ user }) => {
   needSuper(user);
-  return { users: db.users, lobbies: db.lobbies, sessions: db.sessions };
+  return { users: db.users, lobbies: db.lobbies, sessions: db.sessions, events: eventsList() };
 }, 'any');
 route('POST', '/api/restore', ({ user, body }) => {
   needSuper(user);
   if (!Array.isArray(body.users) || !Array.isArray(body.lobbies) || !Array.isArray(body.sessions)
       || !body.users.some(u => u.id === user.id) || !body.lobbies.some(l => l.ownerId === user.id))
     throw new HttpError(400, 'Not a valid backup for this account');
-  db = { users: body.users, lobbies: body.lobbies, sessions: body.sessions, tokens: db.tokens };
+  db = { users: body.users, lobbies: body.lobbies, sessions: body.sessions, events: Array.isArray(body.events) ? body.events : [], tokens: db.tokens };
   save();
   return { ok: true };
 }, 'any');
@@ -204,6 +207,113 @@ route('DELETE', '/api/sessions/:id', ({ user, params }) => {
   needSuper(user);
   db.sessions = db.sessions.filter(x => x.id !== params.id); save();
   return { ok: true };
+}, 'any');
+
+
+// ---------- events: upcoming -> live -> finished ----------
+const eventsList = () => (db.events = db.events || []);
+const findEvent = id => { const e = eventsList().find(x => x.id === id); if (!e) throw new HttpError(404, 'Event not found'); return e; };
+const money = n => '$' + (Math.round(n * 100) / 100).toLocaleString('en-US');
+const posNum = v => { const n = Number(v); if (!isFinite(n) || n <= 0) throw new HttpError(400, 'Enter an amount greater than 0'); return n; };
+const playerTotals = p => { const rebuys = (p.rebuys || []).reduce((a, r) => a + r.amount, 0); return { rebuys, total: p.buyIn + rebuys }; };
+function evView(e, userId) {
+  const players = e.players.map(p => {
+    const u = db.users.find(x => x.id === p.userId);
+    return { userId: p.userId, name: u ? u.name : 'Removed player', buyIn: p.buyIn, ...playerTotals(p), joinedAt: p.joinedAt };
+  });
+  return {
+    id: e.id, title: e.title, date: e.date, time: e.time, location: e.location, minBuyIn: e.minBuyIn, maxSeats: e.maxSeats,
+    status: e.status, startedAt: e.startedAt, players, pot: players.reduce((a, p) => a + p.total, 0),
+    seatsLeft: e.maxSeats ? Math.max(0, e.maxSeats - players.length) : null,
+    joined: players.some(p => p.userId === userId),
+  };
+}
+
+route('POST', '/api/events', ({ user, body }) => {
+  needSuper(user);
+  const date = String(body.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'Pick a date for the event');
+  const time = String(body.time || '');
+  if (time && !/^\d{2}:\d{2}$/.test(time)) throw new HttpError(400, 'Bad time');
+  const maxSeats = body.maxSeats ? Math.floor(Number(body.maxSeats)) : 0;
+  if (body.maxSeats && (!isFinite(maxSeats) || maxSeats < 2)) throw new HttpError(400, 'Seats must be 2 or more');
+  const e = {
+    id: uid(), title: String(body.title || '').trim().slice(0, 60) || 'Poker Night', date, time,
+    location: String(body.location || '').trim().slice(0, 100), minBuyIn: num(body.minBuyIn || 0), maxSeats,
+    status: 'upcoming', players: [], created: Date.now(),
+  };
+  eventsList().push(e); save();
+  return evView(e, user.id);
+}, 'any');
+
+route('DELETE', '/api/events/:id', ({ user, params }) => {
+  needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status === 'finished') throw new HttpError(400, 'Finished events stay in history');
+  db.events = eventsList().filter(x => x.id !== e.id); save();
+  return { ok: true };
+}, 'any');
+
+route('POST', '/api/events/:id/join', ({ user, params, body }) => {
+  const l = theLobby();
+  if (!l || !l.members.includes(user.id)) throw new HttpError(403, 'Not in the lobby');
+  const e = findEvent(params.id);
+  if (e.status !== 'upcoming' && e.status !== 'live') throw new HttpError(400, 'This event is closed');
+  if (e.players.some(p => p.userId === user.id)) throw new HttpError(409, 'You already joined');
+  const buyIn = posNum(body.buyIn);
+  if (buyIn < e.minBuyIn) throw new HttpError(400, `Minimum buy-in is ${money(e.minBuyIn)}`);
+  if (e.maxSeats && e.players.length >= e.maxSeats) throw new HttpError(400, 'No seats left');
+  e.players.push({ userId: user.id, buyIn, rebuys: [], joinedAt: Date.now() }); save();
+  return evView(e, user.id);
+}, 'any');
+
+route('DELETE', '/api/events/:id/join', ({ user, params }) => {
+  const e = findEvent(params.id);
+  if (e.status === 'live') throw new HttpError(400, 'The game has started. Ask the super user to remove you.');
+  if (e.status !== 'upcoming') throw new HttpError(400, 'This event is closed');
+  e.players = e.players.filter(p => p.userId !== user.id); save();
+  return { ok: true };
+}, 'any');
+
+route('DELETE', '/api/events/:id/players/:uid', ({ user, params }) => {
+  needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status === 'finished') throw new HttpError(400, 'Event is finished');
+  e.players = e.players.filter(p => p.userId !== params.uid); save();
+  return { ok: true };
+}, 'any');
+
+route('POST', '/api/events/:id/start', ({ user, params }) => {
+  needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status !== 'upcoming') throw new HttpError(400, 'Event already started or closed');
+  if (eventsList().some(x => x.status === 'live')) throw new HttpError(400, 'Another session is already in progress');
+  if (e.players.length < 2) throw new HttpError(400, 'Need at least 2 players to start');
+  e.status = 'live'; e.startedAt = Date.now(); save();
+  return evView(e, user.id);
+}, 'any');
+
+route('POST', '/api/events/:id/rebuy', ({ user, params, body }) => {
+  needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
+  const p = e.players.find(x => x.userId === body.userId);
+  if (!p) throw new HttpError(404, 'Player not in this session');
+  (p.rebuys = p.rebuys || []).push({ amount: posNum(body.amount), at: Date.now() }); save();
+  return evView(e, user.id);
+}, 'any');
+
+// End the session: record cash-outs and save it as a normal game in everyone's history.
+route('POST', '/api/events/:id/finish', ({ user, params, body }) => {
+  const l = needSuper(user);
+  const e = findEvent(params.id);
+  if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
+  const outs = body.cashOuts || {};
+  const entries = e.players.map(p => ({ userId: p.userId, buyIn: playerTotals(p).total, cashOut: num(outs[p.userId] || 0) }));
+  const s = { id: uid(), lobbyId: l.id, created: Date.now(), date: e.date, note: e.title, entries: cleanEntries(l, entries) };
+  db.sessions.push(s);
+  e.status = 'finished'; e.sessionId = s.id; e.finishedAt = Date.now(); save();
+  return { ok: true, sessionId: s.id };
 }, 'any');
 
 // ---------- request handling ----------

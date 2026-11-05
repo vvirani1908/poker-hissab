@@ -37,6 +37,13 @@
   .hero { text-align:center; padding:8px 0 4px; } .hero .big { font-size:44px; font-weight:700; letter-spacing:-1px; } .hero small { color:var(--mute); }
   .chart { width:100%; height:auto; display:block; margin-top:8px; } .chart text { fill:var(--mute); font-size:11px; }
   .pill { display:inline-block; background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12px; color:var(--mute); }
+  .live { border-color:#7f3a3a; background:linear-gradient(180deg,#2a1a1a 0%,var(--card) 60%); }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--loss); margin-right:8px; box-shadow:0 0 0 0 rgba(248,113,113,.7); animation:pulse 1.6s infinite; }
+  @keyframes pulse { 70% { box-shadow:0 0 0 10px rgba(248,113,113,0); } 100% { box-shadow:0 0 0 0 rgba(248,113,113,0); } }
+  .ev { border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; background:#12201a; }
+  .ev h3 { color:var(--text); font-size:16px; margin:0 0 2px; } .chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+  .chip { background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:13px; }
+  .tag { color:var(--accent); font-weight:600; }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
@@ -131,6 +138,7 @@ async function dashboard() {
   const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
 
   app.innerHTML = `
+    <div id="eventsBox">${eventsHTML()}</div>
     <div class="card"><div class="hero"><small>Your overall earnings · ${esc(D.lobby.name)}</small>
       <div class="big">${signed(m.net)}</div>
       <small>${m.games ? `${m.games} night${m.games === 1 ? '' : 's'} played · won ${m.wins}, lost ${m.games - m.wins}` : 'No games played yet'}</small></div>
@@ -156,6 +164,12 @@ async function dashboard() {
       <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="sm" id="sh">Share</button></div></div>
       <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account” and enter the code.</p>
       <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div></div>
+
+    <div class="card"><h2>Schedule an event</h2>
+      <div class="row"><input id="etitle" placeholder="Title (e.g. Friday Night Game)"><input id="eloc" placeholder="Location"></div>
+      <div class="row" style="margin-top:8px"><input type="date" id="edate" value="${new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)}"><input type="time" id="etime" value="20:00">
+        <input type="number" id="emin" min="0" step="any" placeholder="Min buy-in ($)"><input type="number" id="eseats" min="2" placeholder="Max seats (optional)"></div>
+      <div class="row" style="margin-top:10px"><button id="ecreate">Create event</button></div><p class="err" id="eerr"></p></div>
 
     <div class="card"><h2 id="formTitle">Record a poker night</h2><div id="sform"></div></div>
 
@@ -186,6 +200,12 @@ async function dashboard() {
     const f = e.target.files[0]; if (!f) return;
     if (!confirm('Replace ALL current data with this backup?')) return;
     try { await api('POST', '/api/restore', JSON.parse(await f.text())); dashboard(); } catch (x) { $('#err3').textContent = x.message; }
+  };
+  $('#ecreate').onclick = async () => {
+    try {
+      await api('POST', '/api/events', { title: $('#etitle').value, location: $('#eloc').value, date: $('#edate').value, time: $('#etime').value, minBuyIn: $('#emin').value || 0, maxSeats: $('#eseats').value });
+      dashboard();
+    } catch (e) { $('#eerr').textContent = e.message; }
   };
   sessionForm(null);
 }
@@ -231,6 +251,100 @@ function sessionForm(s) {
 function editSession(sid) { sessionForm(D.sessions.find(x => x.id === sid)); $('#formTitle').scrollIntoView({ behavior: 'smooth' }); }
 async function delSession(sid) { if (confirm('Delete this game?')) { await api('DELETE', '/api/sessions/' + sid); dashboard(); } }
 async function rmMember(u) { if (confirm('Remove this player? Their past games stop counting.')) { await api('DELETE', '/api/members/' + u); dashboard(); } }
+
+// ---------- events: upcoming + live session ----------
+const fmtTime = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${(h % 12) || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+const evWhen = e => fmtDate(e.date) + (e.time ? ' · ' + fmtTime(e.time) : '');
+
+function joinBox(e) {
+  if (e.joined) {
+    const mine = e.players.find(p => p.userId === D.user.id);
+    return `<p style="margin:10px 0 0"><span class="win">✓ You're in</span> with ${money(mine.total)}
+      ${e.status === 'upcoming' ? `<button class="ghost sm" onclick="leaveEvent('${e.id}')" style="margin-left:8px">Leave</button>` : ''}</p>`;
+  }
+  if (e.seatsLeft === 0) return '<p class="mute" style="margin:10px 0 0">No seats left.</p>';
+  return `<div style="margin-top:10px"><div class="row"><input type="number" id="jb-${e.id}" min="${e.minBuyIn}" step="any" value="${e.minBuyIn || ''}" placeholder="Your buy-in" style="max-width:160px;flex:0 1 160px">
+      <button onclick="joinEvent('${e.id}')">${e.status === 'live' ? 'Join late' : 'Join'}</button></div>
+    <div class="mute" style="font-size:12px;margin-top:4px">${e.minBuyIn ? `Minimum buy-in ${money(e.minBuyIn)}. You can't join below it.` : 'No minimum buy-in.'}</div><p class="err" id="je-${e.id}"></p></div>`;
+}
+
+function eventHTML(e, sup) {
+  const live = e.status === 'live';
+  const chips = e.players.map(p => `<span class="chip">${esc(p.name)} <span class="mute">${money(p.total)}</span>${sup ? ` <a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">✕</a>` : ''}</span>`).join('') || '<span class="mute">Nobody yet. Be the first.</span>';
+  const head = live
+    ? `<div class="row" style="justify-content:space-between"><h2 style="margin:0"><span class="dot"></span>Session in progress</h2><span class="pill">started ${new Date(e.startedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span></div><h3 style="margin:8px 0 0;font-size:16px;color:var(--text)">${esc(e.title)}${e.location ? ` <span class="mute">· ${esc(e.location)}</span>` : ''}</h3>`
+    : `<div class="row" style="justify-content:space-between"><div><span class="tag">UPCOMING</span><h3 style="margin-top:2px">${esc(e.title)}</h3><div class="mute">${evWhen(e)}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
+        <div style="text-align:right"><div class="stat" style="padding:8px 12px"><small>Min buy-in</small><b style="font-size:18px">${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div></div>`;
+  const stats = live
+    ? `<div class="grid" style="margin-top:12px"><div class="stat"><small>Pot</small><b>${money(e.pot)}</b></div><div class="stat"><small>Players</small><b>${e.players.length}</b></div><div class="stat"><small>Min buy-in</small><b>${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div>` : '';
+  const table = live ? `<table style="margin-top:12px"><tr><th>Player</th><th>Buy-in</th><th>Rebuys</th><th>Total</th>${sup ? '<th></th>' : ''}</tr>
+      ${e.players.map(p => `<tr><td>${esc(p.name)}${p.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${money(p.buyIn)}</td><td>${p.rebuys ? money(p.rebuys) : '—'}</td><td><b>${money(p.total)}</b></td>
+        ${sup ? `<td style="white-space:nowrap"><input type="number" id="rb-${e.id}-${p.userId}" min="1" placeholder="Rebuy $" style="width:84px;padding:4px"> <button class="ghost sm" onclick="rebuy('${e.id}','${p.userId}')">+</button> <a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">✕</a></td>` : ''}</tr>`).join('')}</table>`
+    : `<div class="chips">${chips}</div><div class="mute" style="font-size:13px">${e.players.length} joined${e.seatsLeft !== null ? ` · ${e.seatsLeft} seat${e.seatsLeft === 1 ? '' : 's'} left` : ''}</div>`;
+  const supBtns = sup ? `<div class="row" style="margin-top:12px">${live
+    ? `<button onclick="openSettle('${e.id}')">End session &amp; enter cash-outs</button>`
+    : `<button onclick="startEvent('${e.id}')">Start session</button><button class="danger sm" onclick="cancelEvent('${e.id}')">Cancel event</button>`}</div><p class="err" id="se-${e.id}"></p><div id="settle-${e.id}"></div>` : '';
+  return `<div class="card ${live ? 'live' : ''}">${head}${stats}${table}${joinBox(e)}${supBtns}</div>`;
+}
+function eventsHTML() {
+  const evs = (D && D.events) || [];
+  return evs.map(e => eventHTML(e, D.isSuper)).join('');
+}
+const refreshEvents = async (full) => { if (full) return dashboard(); D = await api('GET', '/api/home'); $('#eventsBox').innerHTML = eventsHTML(); };
+
+async function joinEvent(id) {
+  const v = +$('#jb-' + id).value, e = D.events.find(x => x.id === id);
+  if (!(v > 0)) return $('#je-' + id).textContent = 'Enter your buy-in amount';
+  if (v < e.minBuyIn) return $('#je-' + id).textContent = `Minimum buy-in is ${money(e.minBuyIn)}`;
+  try { await api('POST', `/api/events/${id}/join`, { buyIn: v }); refreshEvents(); } catch (x) { $('#je-' + id).textContent = x.message; }
+}
+async function leaveEvent(id) { try { await api('DELETE', `/api/events/${id}/join`); refreshEvents(); } catch (x) { alert(x.message); } }
+async function startEvent(id) {
+  try { await api('POST', `/api/events/${id}/start`); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
+}
+async function cancelEvent(id) { if (confirm('Cancel this event?')) { await api('DELETE', '/api/events/' + id); refreshEvents(); } }
+async function removePlayer(id, u) { if (confirm('Remove this player from the event?')) { await api('DELETE', `/api/events/${id}/players/${u}`); refreshEvents(); } }
+async function rebuy(id, u) {
+  const amt = +$(`#rb-${id}-${u}`).value;
+  try { await api('POST', `/api/events/${id}/rebuy`, { userId: u, amount: amt }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
+}
+function openSettle(id) {
+  const e = D.events.find(x => x.id === id), box = $('#settle-' + id);
+  box.innerHTML = `<div class="warn" style="margin-top:12px"><b>End session</b> — enter what each player cashed out with.</div>
+    <table><tr><th>Player</th><th>Total in</th><th>Cash-out</th><th>Net</th></tr>
+    ${e.players.map(p => `<tr data-u="${p.userId}" data-in="${p.total}"><td>${esc(p.name)}</td><td>${money(p.total)}</td><td><input type="number" min="0" step="any" class="co" placeholder="0"></td><td class="net">—</td></tr>`).join('')}
+    <tr><td><b>Total</b></td><td>${money(e.pot)}</td><td id="so-${id}">—</td><td></td></tr></table><div id="sc-${id}"></div>
+    <div class="row" style="margin-top:10px"><button id="sf-${id}">Save &amp; end session</button><button class="ghost" onclick="$('#settle-${id}').innerHTML=''">Cancel</button></div>`;
+  const calc = () => {
+    let out = 0;
+    box.querySelectorAll('tr[data-u]').forEach(tr => { const c = +tr.querySelector('.co').value || 0; out += c; tr.querySelector('.net').innerHTML = signed(c - +tr.dataset.in); });
+    $('#so-' + id).textContent = money(out);
+    $('#sc-' + id).innerHTML = Math.abs(out - e.pot) > 0.001 ? `<div class="warn">Cash-outs differ from the pot by ${money(Math.abs(out - e.pot))}.</div>` : '<div class="win" style="margin-top:8px">✓ Balanced</div>';
+  };
+  box.oninput = calc; calc();
+  $('#sf-' + id).onclick = async () => {
+    const cashOuts = {}; box.querySelectorAll('tr[data-u]').forEach(tr => cashOuts[tr.dataset.u] = +tr.querySelector('.co').value || 0);
+    try { await api('POST', `/api/events/${id}/finish`, { cashOuts }); dashboard(); } catch (x) { $('#se-' + id).textContent = x.message; }
+  };
+}
+
+// keep the live session fresh for everyone without disturbing forms
+setInterval(async () => {
+  if (!token || !me || !D) return;
+  const box = $('#eventsBox'); if (!box) return;
+  const a = document.activeElement;
+  if (box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;
+  if (box.querySelector('[id^="settle-"] table')) return;
+  try {
+    const nd = await api('GET', '/api/home');
+    const sig = x => JSON.stringify(x.events);
+    if (sig(nd) === sig(D)) return;
+    const hadLive = D.events.some(e => e.status === 'live'), hasLive = nd.events.some(e => e.status === 'live');
+    D = nd;
+    if (hadLive && !hasLive) return dashboard();
+    box.innerHTML = eventsHTML();
+  } catch {}
+}, 15000);
 
 route();
 </script>
