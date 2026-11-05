@@ -3,7 +3,7 @@ services:
     name: poker-hissab
     runtime: node
     plan: starter
-    buildCommand: echo "no build"
+    buildCommand: npm install
     startCommand: node server.js
     envVars:
       - key: DATA_DIR
