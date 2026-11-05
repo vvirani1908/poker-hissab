@@ -44,11 +44,28 @@
   .ev h3 { color:var(--text); font-size:16px; margin:0 0 2px; } .chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
   .chip { background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:13px; }
   .tag { color:var(--accent); font-weight:600; }
+  nav#nav { display:flex; gap:6px; max-width:860px; margin:0 auto; padding:10px 16px 0; }
+  nav#nav a { padding:8px 16px; border-radius:999px; color:var(--mute); text-decoration:none; font-weight:600; font-size:14px; border:1px solid transparent; }
+  nav#nav a.on { background:var(--accent); color:#1b1500; } nav#nav a:not(.on):hover { border-color:var(--line); color:var(--text); }
+  .podium { display:flex; align-items:flex-end; justify-content:center; gap:10px; margin:6px 0 18px; }
+  .pod { flex:1; max-width:190px; text-align:center; } .pod .who { font-weight:600; margin-bottom:2px; word-break:break-word; } .pod .amt { font-size:15px; margin-bottom:6px; }
+  .pod .base { border-radius:10px 10px 0 0; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-size:26px; }
+  .pod.p1 .base { height:112px; background:linear-gradient(180deg,#6b5513,#3b3010); } .pod.p2 .base { height:84px; background:linear-gradient(180deg,#4a5057,#2c3135); } .pod.p3 .base { height:62px; background:linear-gradient(180deg,#6a4220,#3a2512); }
+  .avatar { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent),#c98a1c); color:#1b1500; flex:none; }
+  .formdots { display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .fd { min-width:54px; text-align:center; padding:5px 8px; border-radius:8px; font-size:13px; font-weight:700; }
+  .fd.w { background:#12331f; color:var(--win); } .fd.l { background:#3a1717; color:var(--loss); } .fd.p { background:#222; color:var(--mute); }
+  .badges { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
+  .badge { display:flex; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#12201a; }
+  .badge .ic { font-size:26px; } .badge small { color:var(--mute); display:block; font-size:12px; } .badge.off { opacity:.4; filter:grayscale(1); } .badge.on { border-color:#6b5513; }
+  .insight { padding:10px 12px; border-left:3px solid var(--accent); background:#12201a; border-radius:0 10px 10px 0; margin-bottom:8px; font-size:14px; }
+  .bar { height:8px; border-radius:4px; background:#0f1a14; overflow:hidden; min-width:60px; } .bar i { display:block; height:100%; }
+  .empty { text-align:center; padding:26px 12px; color:var(--mute); }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
 <body>
-<header><h1 onclick="route()">♠ Poker <span>Hissab</span></h1><div id="who"></div></header>
+<header><h1 onclick="location.hash='#/'">♠ Poker <span>Hissab</span></h1><div id="who"></div></header>
+<nav id="nav"></nav>
 <main id="app"></main>
 
 <script>
@@ -73,9 +90,17 @@ const setErr = m => { const e = $('#err'); if (e) e.textContent = m || ''; };
 async function route() {
   if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
   $('#who').innerHTML = me ? `${esc(me.name)} ${me.role === 'super' ? '<span class="pill">super user</span>' : ''} <button class="ghost sm" onclick="logout()">Log out</button>` : '';
-  if (!me) return loginView();
-  return dashboard();
+  if (!me) { $('#nav').innerHTML = ''; return loginView(); }
+  const h = location.hash;
+  const page = h.startsWith('#/portfolio') ? 'portfolio' : (h.startsWith('#/manage') && me.role === 'super') ? 'manage' : 'home';
+  $('#nav').innerHTML = [['home', '#/', 'Home'], ['portfolio', '#/portfolio', 'My Portfolio'], ...(me.role === 'super' ? [['manage', '#/manage', 'Manage']] : [])]
+    .map(([k, href, label]) => `<a href="${href}" class="${k === page ? 'on' : ''}">${label}</a>`).join('');
+  try { D = await api('GET', '/api/home'); } catch (e) { app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  window.scrollTo(0, 0);
+  return { home: homePage, portfolio: portfolioPage, manage: managePage }[page]();
 }
+const dashboard = () => route();
+window.addEventListener('hashchange', route);
 
 // ---------- sign in / create account ----------
 async function loginView(mode = 'login') {
@@ -131,35 +156,132 @@ function chartSVG(history) {
   </svg>`;
 }
 
-// ---------- dashboard ----------
-async function dashboard() {
-  try { D = await api('GET', '/api/home'); } catch (e) { app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
-  const m = D.me, sup = D.isSuper, hist = [...m.history].reverse();
-  const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
+// ---------- bar chart: result of each night ----------
+function barsSVG(history) {
+  if (!history.length) return '';
+  const W = 640, H = 170, L = 52, R = 14, T = 12, B = 26;
+  const vals = history.map(h => h.net);
+  let hi = Math.max(0, ...vals), lo = Math.min(0, ...vals); if (hi === lo) { hi += 1; lo -= 1; }
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const slot = (W - L - R) / history.length, bw = Math.min(46, slot * 0.66);
+  const step = Math.ceil(history.length / 7);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Result of each night">
+    <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#4d6b5b"/>
+    <text x="${L - 8}" y="${y(hi) + 4}" text-anchor="end">${money(Math.round(hi))}</text><text x="${L - 8}" y="${y(lo) + 4}" text-anchor="end">${money(Math.round(lo))}</text>
+    ${history.map((h, i) => { const x = L + slot * i + (slot - bw) / 2, y0 = y(0), y1 = y(h.net);
+      return `<rect x="${x.toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2, Math.abs(y1 - y0)).toFixed(1)}" rx="3" fill="${h.net >= 0 ? 'var(--win)' : 'var(--loss)'}" opacity=".9"><title>${fmtDate(h.date)}: ${h.net > 0 ? '+' : ''}${money(h.net)}</title></rect>`
+        + (i % step === 0 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${new Date(h.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>` : ''); }).join('')}
+  </svg>`;
+}
 
+// ---------- HOME: events, leaderboard, lobby highlights ----------
+function podiumHTML(st) {
+  const top = st.slice(0, 3); if (!top.length) return '';
+  const medal = ['🥇', '🥈', '🥉'];
+  const order = top.length === 1 ? [0] : top.length === 2 ? [1, 0] : [1, 0, 2];
+  return `<div class="podium">${order.map(i => { const p = top[i]; return `<div class="pod p${i + 1}"><div class="who">${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</div><div class="amt">${signed(p.net)}</div><div class="base">${medal[i]}</div></div>`; }).join('')}</div>`;
+}
+function homePage() {
+  const H = D.highlights, st = D.standings;
   app.innerHTML = `
     <div id="eventsBox">${eventsHTML()}</div>
-    <div class="card"><div class="hero"><small>Your overall earnings · ${esc(D.lobby.name)}</small>
-      <div class="big">${signed(m.net)}</div>
-      <small>${m.games ? `${m.games} night${m.games === 1 ? '' : 's'} played · won ${m.wins}, lost ${m.games - m.wins}` : 'No games played yet'}</small></div>
-      ${chartSVG(m.history)}
-      <div class="grid" style="margin-top:14px">
-        <div class="stat"><small>Total start (in)</small><b>${money(m.buyIn)}</b></div>
-        <div class="stat"><small>Total end (out)</small><b>${money(m.cashOut)}</b></div>
-        <div class="stat"><small>Best night</small><b>${signed(m.best)}</b></div>
-        <div class="stat"><small>Worst night</small><b>${signed(m.worst)}</b></div></div></div>
 
-    <div class="card"><h2>Your game history</h2>
-      ${hist.length ? `<table><tr><th>Date</th><th>Start</th><th>End</th><th>Won / lost</th></tr>
-        ${hist.map(h => `<tr><td>${fmtDate(h.date)}${h.note ? `<div class="mute" style="font-size:12px">${esc(h.note)}</div>` : ''}</td><td>${money(h.buyIn)}</td><td>${money(h.cashOut)}</td><td><b>${signed(h.net)}</b></td></tr>`).join('')}</table>`
-        : '<p class="mute">Nothing yet. Your nights will show up here once the super user records a game you played in.</p>'}</div>
+    <div class="card"><h2>🏆 Leaderboard</h2>
+      ${st.length ? podiumHTML(st) : ''}
+      <table><tr><th>#</th><th>Player</th><th>Nights</th><th>Win rate</th><th>Net</th></tr>
+      ${st.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${p.games}</td><td>${p.games ? Math.round(100 * p.wins / p.games) + '%' : '—'}</td><td><b>${signed(p.net)}</b></td></tr>`).join('')}</table></div>
 
-    <div class="card"><h2>Leaderboard</h2>
-      <table><tr><th>Player</th><th>Games</th><th>Net</th></tr>
-      ${D.standings.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${p.games}</td><td><b>${signed(p.net)}</b></td></tr>`).join('')}</table></div>
+    <div class="card"><h2>📊 The lobby so far</h2>
+      <div class="grid">
+        <div class="stat"><small>Nights played</small><b>${H.games}</b></div>
+        <div class="stat"><small>Total money played</small><b>${money(H.pot)}</b></div>
+        <div class="stat"><small>Biggest night won</small><b>${H.biggestWin ? signed(H.biggestWin.amount) : '—'}</b><small>${H.biggestWin ? esc(H.biggestWin.name) + ' · ' + fmtDate(H.biggestWin.date) : ''}</small></div>
+        <div class="stat"><small>Toughest night</small><b>${H.biggestLoss ? signed(H.biggestLoss.amount) : '—'}</b><small>${H.biggestLoss ? esc(H.biggestLoss.name) + ' · ' + fmtDate(H.biggestLoss.date) : ''}</small></div></div></div>
 
-    ${sup ? `
-    <h2 style="margin:28px 0 12px;color:var(--accent)">Super user controls</h2>
+    <div class="card"><h2>🕒 Recent nights</h2>
+      ${H.recent.length ? `<table><tr><th>Date</th><th>Players</th><th>Pot</th><th>Night's winner</th></tr>
+        ${H.recent.map(r => `<tr><td>${fmtDate(r.date)}${r.note ? `<div class="mute" style="font-size:12px">${esc(r.note)}</div>` : ''}</td><td>${r.players}</td><td>${money(r.pot)}</td><td>${r.winner ? `${esc(r.winner.name)} ${signed(r.winner.net)}` : '—'}</td></tr>`).join('')}</table>` : '<p class="mute">No games recorded yet.</p>'}</div>`;
+}
+
+// ---------- PORTFOLIO: personal stats ----------
+function portfolioPage() {
+  const m = D.me, hist = m.history, n = hist.length;
+  const rank = D.standings.findIndex(p => p.id === D.user.id) + 1;
+  const wins = hist.filter(h => h.net > 0), losses = hist.filter(h => h.net < 0);
+  const winRate = n ? Math.round(100 * wins.length / n) : 0;
+  const roi = m.buyIn ? (100 * m.net / m.buyIn) : 0;
+  const avg = n ? m.net / n : 0;
+  const avgWin = wins.length ? wins.reduce((a, h) => a + h.net, 0) / wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((a, h) => a + h.net, 0) / losses.length : 0;
+  // streaks
+  let longestWin = 0, run = 0;
+  hist.forEach(h => { run = h.net > 0 ? run + 1 : 0; longestWin = Math.max(longestWin, run); });
+  let cur = 0, curSign = 0;
+  for (let i = n - 1; i >= 0; i--) { const sg = Math.sign(hist[i].net); if (i === n - 1) { curSign = sg; cur = 1; if (!sg) break; } else if (sg === curSign) cur++; else break; }
+  const bestN = n ? hist.reduce((a, h) => h.net > a.net ? h : a) : null, worstN = n ? hist.reduce((a, h) => h.net < a.net ? h : a) : null;
+  const form = hist.slice(-5);
+  // by month
+  const months = {};
+  hist.forEach(h => { const k = h.date.slice(0, 7); (months[k] = months[k] || { n: 0, net: 0 }); months[k].n++; months[k].net += h.net; });
+  const monthRows = Object.entries(months).sort((a, b) => b[0].localeCompare(a[0]));
+  const maxAbs = Math.max(1, ...hist.map(h => Math.abs(h.net)));
+  const badges = [
+    { ic: '👑', t: 'Lobby leader', d: 'Currently #1 on the leaderboard', on: rank === 1 && n > 0 },
+    { ic: '🔥', t: 'On fire', d: 'Won your last 2+ nights in a row', on: curSign > 0 && cur >= 2 },
+    { ic: '🎯', t: 'Consistent', d: '60%+ win rate over 5+ nights', on: n >= 5 && winRate >= 60 },
+    { ic: '💎', t: 'Big night', d: 'Won $500+ in a single night', on: !!bestN && bestN.net >= 500 },
+    { ic: '🛡️', t: 'Veteran', d: 'Played 10 or more nights', on: n >= 10 },
+    { ic: '📈', t: 'In the green', d: 'Overall profit across all nights', on: m.net > 0 },
+  ];
+  const insights = [];
+  if (n) {
+    insights.push(`You win <b>${winRate}%</b> of your nights (${wins.length} won, ${losses.length} lost${n - wins.length - losses.length ? `, ${n - wins.length - losses.length} even` : ''}).`);
+    if (wins.length && losses.length) insights.push(`When you win you average <b class="win">+${money(avgWin)}</b>; when you lose, <b class="loss">${money(avgLoss)}</b>.`);
+    insights.push(`On average you put in <b>${money(m.buyIn / n)}</b> a night and walk away with <b>${money(m.cashOut / n)}</b>.`);
+    if (curSign !== 0) insights.push(`Current streak: <b class="${curSign > 0 ? 'win' : 'loss'}">${cur} ${curSign > 0 ? 'win' : 'loss'}${cur === 1 ? '' : (curSign > 0 ? 's' : 'es')}</b> in a row. Longest win streak: <b>${longestWin}</b>.`);
+  }
+  const mine = D.events.filter(e => e.joined);
+  app.innerHTML = `
+    <div class="card"><div class="row" style="gap:16px;flex-wrap:nowrap">
+      <div class="avatar">${esc((D.user.name || '?').trim()[0].toUpperCase())}</div>
+      <div><div style="font-size:20px;font-weight:700">${esc(D.user.name)}</div>
+        <div class="mute">${n ? `Rank <b style="color:var(--text)">#${rank}</b> of ${D.standings.length} in ${esc(D.lobby.name)}` : esc(D.lobby.name)}</div></div></div>
+      <div class="hero" style="margin-top:6px"><small>Overall earnings</small><div class="big">${signed(m.net)}</div>
+        <small>${n ? `${n} night${n === 1 ? '' : 's'} · ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% return on money put in` : 'No games played yet'}</small></div>
+      ${n ? `<div style="margin-top:12px"><div class="mute" style="font-size:12px;margin-bottom:6px">LAST ${form.length} NIGHT${form.length === 1 ? '' : 'S'}</div><div class="formdots">${form.map(h => `<span class="fd ${h.net > 0 ? 'w' : h.net < 0 ? 'l' : 'p'}" title="${fmtDate(h.date)}">${h.net > 0 ? '+' : ''}${money(h.net)}</span>`).join('')}</div></div>` : ''}</div>
+
+    ${mine.length ? `<div class="card"><h2>📅 You're in</h2>${mine.map(e => `<div class="ev" style="margin:0 0 8px"><b>${esc(e.title)}</b> ${e.status === 'live' ? '<span class="loss"><span class="dot"></span>live now</span>' : ''}<div class="mute">${evWhen(e)}${e.location ? ' · ' + esc(e.location) : ''} · your buy-in ${money(e.players.find(p => p.userId === D.user.id).total)}</div></div>`).join('')}</div>` : ''}
+
+    <div class="card"><h2>📈 Bankroll over time</h2><div class="mute" style="font-size:13px">Running total of your wins and losses</div>${chartSVG(hist)}</div>
+    ${n ? `<div class="card"><h2>📊 Night by night</h2>${barsSVG(hist)}</div>` : ''}
+
+    <div class="card"><h2>🧮 Your numbers</h2><div class="grid">
+      <div class="stat"><small>Win rate</small><b>${n ? winRate + '%' : '—'}</b></div>
+      <div class="stat"><small>Avg per night</small><b>${n ? signed(avg) : '—'}</b></div>
+      <div class="stat"><small>Total put in</small><b>${money(m.buyIn)}</b></div>
+      <div class="stat"><small>Total cashed out</small><b>${money(m.cashOut)}</b></div>
+      <div class="stat"><small>Best night</small><b>${bestN ? signed(bestN.net) : '—'}</b><small>${bestN ? fmtDate(bestN.date) : ''}</small></div>
+      <div class="stat"><small>Worst night</small><b>${worstN ? signed(worstN.net) : '—'}</b><small>${worstN ? fmtDate(worstN.date) : ''}</small></div>
+      <div class="stat"><small>Longest win streak</small><b>${n ? longestWin : '—'}</b></div>
+      <div class="stat"><small>Return on money in</small><b>${n ? `<span class="${roi >= 0 ? 'win' : 'loss'}">${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%</span>` : '—'}</b></div></div>
+      ${insights.length ? `<div style="margin-top:14px">${insights.map(t => `<div class="insight">${t}</div>`).join('')}</div>` : ''}</div>
+
+    <div class="card"><h2>🏅 Badges</h2><div class="badges">${badges.map(b => `<div class="badge ${b.on ? 'on' : 'off'}"><span class="ic">${b.ic}</span><div><b>${b.t}</b><small>${b.d}</small></div></div>`).join('')}</div></div>
+
+    ${monthRows.length ? `<div class="card"><h2>🗓️ By month</h2><table><tr><th>Month</th><th>Nights</th><th>Result</th></tr>
+      ${monthRows.map(([k, v]) => `<tr><td>${new Date(k + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</td><td>${v.n}</td><td><b>${signed(v.net)}</b></td></tr>`).join('')}</table></div>` : ''}
+
+    <div class="card"><h2>🗒️ Every night you played</h2>
+      ${n ? `<table><tr><th>Date</th><th>In</th><th>Out</th><th></th><th>Won / lost</th></tr>
+        ${[...hist].reverse().map(h => `<tr><td>${fmtDate(h.date)}${h.note ? `<div class="mute" style="font-size:12px">${esc(h.note)}</div>` : ''}</td><td>${money(h.buyIn)}</td><td>${money(h.cashOut)}</td>
+          <td style="width:90px"><div class="bar"><i style="width:${Math.round(100 * Math.abs(h.net) / maxAbs)}%;background:${h.net >= 0 ? 'var(--win)' : 'var(--loss)'}"></i></div></td><td><b>${signed(h.net)}</b></td></tr>`).join('')}</table>`
+        : '<p class="mute">Nothing yet. Your nights will appear here after the super user records a game you played in.</p>'}</div>`;
+}
+
+// ---------- MANAGE (super user) ----------
+function managePage() {
+  const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
+  app.innerHTML = `
     <div class="card"><div class="row" style="justify-content:space-between"><b>Invite players</b>
       <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="sm" id="sh">Share</button></div></div>
       <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account” and enter the code.</p>
@@ -173,17 +295,16 @@ async function dashboard() {
 
     <div class="card"><h2 id="formTitle">Record a poker night</h2><div id="sform"></div></div>
 
-    <div class="card"><h2>Backup</h2><p class="mute" style="margin-top:0;font-size:13px">Download all players and games as a file. Keep it private (it holds password hashes). You can restore it here later.</p>
-      <div class="row"><button class="ghost" id="bk">Download backup</button><label class="ghost" style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 14px">Restore from file<input type="file" id="rs" accept=".json" hidden></label></div><p class="err" id="err3"></p></div>
-
     <div class="card"><h2>All games</h2>
       ${D.sessions.length ? D.sessions.map(s => `<details><summary><b>${fmtDate(s.date)}</b> ${s.note ? '— ' + esc(s.note) : ''} <span class="mute">· pot ${money(s.totalIn)}</span></summary>
         <table><tr><th>Player</th><th>Start</th><th>End</th><th>Net</th></tr>
         ${s.entries.map(e => `<tr><td>${esc(nameOf(e.userId))}</td><td>${money(e.buyIn)}</td><td>${money(e.cashOut)}</td><td>${signed(e.cashOut - e.buyIn)}</td></tr>`).join('')}</table>
         ${Math.abs(s.totalIn - s.totalOut) > 0.001 ? `<div class="warn">In/out differ by ${money(s.totalIn - s.totalOut)}</div>` : ''}
-        <div class="row" style="margin-top:8px"><button class="ghost sm" onclick="editSession('${s.id}')">Edit</button><button class="danger sm" onclick="delSession('${s.id}')">Delete</button></div></details>`).join('') : '<p class="mute">No games recorded yet.</p>'}</div>` : ''}`;
+        <div class="row" style="margin-top:8px"><button class="ghost sm" onclick="editSession('${s.id}')">Edit</button><button class="danger sm" onclick="delSession('${s.id}')">Delete</button></div></details>`).join('') : '<p class="mute">No games recorded yet.</p>'}</div>
 
-  if (!sup) return;
+    <div class="card"><h2>Backup</h2><p class="mute" style="margin-top:0;font-size:13px">Download all players and games as a file. Keep it private (it holds password hashes). You can restore it here later.</p>
+      <div class="row"><button class="ghost" id="bk">Download backup</button><label class="ghost" style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 14px">Restore from file<input type="file" id="rs" accept=".json" hidden></label></div><p class="err" id="err3"></p></div>`;
+
   const msg = `Join my poker lobby "${D.lobby.name}" — code: ${D.lobby.code}\n${location.origin}`;
   $('#cp').onclick = () => { navigator.clipboard?.writeText(D.lobby.code); $('#cp').textContent = 'Copied ✓'; };
   $('#sh').onclick = async () => {
@@ -204,7 +325,7 @@ async function dashboard() {
   $('#ecreate').onclick = async () => {
     try {
       await api('POST', '/api/events', { title: $('#etitle').value, location: $('#eloc').value, date: $('#edate').value, time: $('#etime').value, minBuyIn: $('#emin').value || 0, maxSeats: $('#eseats').value });
-      dashboard();
+      location.hash = '#/';
     } catch (e) { $('#eerr').textContent = e.message; }
   };
   sessionForm(null);
@@ -288,6 +409,7 @@ function eventHTML(e, sup) {
 }
 function eventsHTML() {
   const evs = (D && D.events) || [];
+  if (!evs.length) return `<div class="card empty"><div style="font-size:30px">🃏</div><b style="color:var(--text)">No game scheduled yet</b><div style="font-size:14px;margin-top:4px">${D.isSuper ? 'Plan the next night from <a href="#/manage" style="color:var(--accent)">Manage</a>.' : 'When the super user schedules a game, it will show up here so you can join.'}</div></div>`;
   return evs.map(e => eventHTML(e, D.isSuper)).join('');
 }
 const refreshEvents = async (full) => { if (full) return dashboard(); D = await api('GET', '/api/home'); $('#eventsBox').innerHTML = eventsHTML(); };

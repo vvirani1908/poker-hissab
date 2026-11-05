@@ -37,10 +37,10 @@ function lobbyView(l) {
   const members = l.members.map(id => db.users.find(u => u.id === id)).filter(Boolean).map(pub);
   const sessions = db.sessions.filter(s => s.lobbyId === l.id).sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
   const totals = {};
-  members.forEach(m => totals[m.id] = { ...m, buyIn: 0, cashOut: 0, net: 0, games: 0 });
+  members.forEach(m => totals[m.id] = { ...m, buyIn: 0, cashOut: 0, net: 0, games: 0, wins: 0 });
   for (const s of sessions) for (const e of s.entries) {
     const t = totals[e.userId]; if (!t) continue;
-    t.buyIn += e.buyIn; t.cashOut += e.cashOut; t.net += e.cashOut - e.buyIn; t.games++;
+    t.buyIn += e.buyIn; t.cashOut += e.cashOut; t.net += e.cashOut - e.buyIn; t.games++; if (e.cashOut > e.buyIn) t.wins++;
   }
   const standings = Object.values(totals).sort((a, b) => b.net - a.net);
   const sessionsOut = sessions.map(s => ({
@@ -81,6 +81,26 @@ function myHistory(l, userId) {
   });
 }
 const theLobby = () => db.lobbies[0] || null;
+
+// Lobby-wide highlights shown on the home page (no per-player buy-in detail beyond winners)
+function highlights(l) {
+  const sess = db.sessions.filter(s => s.lobbyId === l.id).sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+  const nameOf = id => (db.users.find(u => u.id === id) || {}).name || 'Removed player';
+  let bw = null, bl = null, pot = 0;
+  const recent = [];
+  for (const s of sess) {
+    let sp = 0, top = null;
+    for (const e of s.entries) {
+      const net = e.cashOut - e.buyIn; sp += e.buyIn;
+      if (!bw || net > bw.amount) bw = { name: nameOf(e.userId), amount: net, date: s.date };
+      if (!bl || net < bl.amount) bl = { name: nameOf(e.userId), amount: net, date: s.date };
+      if (!top || net > top.net) top = { name: nameOf(e.userId), net };
+    }
+    pot += sp;
+    if (recent.length < 5) recent.push({ date: s.date, note: s.note, pot: sp, players: s.entries.length, winner: top && top.net > 0 ? top : null });
+  }
+  return { games: sess.length, pot, biggestWin: bw && bw.amount > 0 ? bw : null, biggestLoss: bl && bl.amount < 0 ? bl : null, recent };
+}
 
 // ---------- routes ----------
 const routes = [];
@@ -155,6 +175,7 @@ route('GET', '/api/home', ({ user }) => {
     history,
   };
   const out = { user: pub(user), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
+  out.highlights = highlights(l);
   out.events = eventsList().filter(e => e.status === 'upcoming' || e.status === 'live')
     .sort((a, b) => (a.status === 'live' ? -1 : 0) - (b.status === 'live' ? -1 : 0) || (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
     .map(e => evView(e, user.id));
