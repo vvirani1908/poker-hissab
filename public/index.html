@@ -4,8 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Poker Hissab</title>
+<script>
+  (function () { try { var t = localStorage.getItem('theme'); if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+</script>
 <style>
-  :root { --bg:#0f1a14; --card:#17261d; --line:#254033; --text:#e8f1ec; --mute:#8fa89a; --accent:#f2c14e; --win:#4ade80; --loss:#f87171; }
+  :root { color-scheme:dark; --bg:#0f1a14; --card:#17261d; --line:#254033; --text:#e8f1ec; --mute:#8fa89a; --accent:#f2c14e; --on-accent:#1b1500; --win:#4ade80; --loss:#f87171;
+          --inset:#0f1a14; --panel:#12201a; --warn-bg:#3a2a0a; --win-bg:#12331f; --loss-bg:#3a1717; --even-bg:#222; --gold:#6b5513; --axis:#4d6b5b; --line-strong:#2f5442;
+          --live-bg:#2a1a1a; --live-line:#7f3a3a; --accent-soft:#1e1a0a; --shadow:rgba(0,0,0,.45);
+          --pod1:linear-gradient(180deg,#6b5513,#3b3010); --pod2:linear-gradient(180deg,#4a5057,#2c3135); --pod3:linear-gradient(180deg,#6a4220,#3a2512); }
+  :root[data-theme=light] { color-scheme:light; --bg:#f4f1ea; --card:#ffffff; --line:#e2dccd; --text:#1d2a22; --mute:#5f6d64; --accent:#b9770e; --on-accent:#ffffff; --win:#15803d; --loss:#c0392b;
+          --inset:#efeadc; --panel:#f8f5ee; --warn-bg:#fff3d1; --win-bg:#dcfce7; --loss-bg:#fee2e2; --even-bg:#e5e7eb; --gold:#e3c466; --axis:#a8b3a8; --line-strong:#cfc7b2;
+          --live-bg:#fdebe8; --live-line:#e9b4ae; --accent-soft:#fdf3d4; --shadow:rgba(60,50,20,.18);
+          --pod1:linear-gradient(180deg,#f3d98a,#e0b84c); --pod2:linear-gradient(180deg,#dde2e6,#bcc4cc); --pod3:linear-gradient(180deg,#ecc7a0,#d39d68); }
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.45 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
   header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
@@ -13,64 +23,66 @@
   main { max-width:860px; margin:0 auto; padding:16px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
   h2 { margin:0 0 12px; font-size:16px; } h3 { margin:0 0 8px; font-size:14px; color:var(--mute); font-weight:600; }
-  input, select { background:#0f1a14; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; width:100%; }
+  textarea { background:var(--inset); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; width:100%; resize:vertical; }
+  textarea:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  input, select { background:var(--inset); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px; font:inherit; width:100%; }
   input:focus { outline:2px solid var(--accent); outline-offset:-1px; }
-  button { background:var(--accent); color:#1b1500; border:0; border-radius:8px; padding:9px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  button { background:var(--accent); color:var(--on-accent); border:0; border-radius:8px; padding:9px 14px; font:inherit; font-weight:600; cursor:pointer; }
   button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
   button.danger { background:transparent; color:var(--loss); border:1px solid var(--loss); }
   button.sm { padding:4px 9px; font-size:13px; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; } .row > input { flex:1; min-width:120px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
-  .stat { background:#0f1a14; border-radius:10px; padding:12px; } .stat b { display:block; font-size:22px; } .stat small { color:var(--mute); }
+  .stat { background:var(--inset); border-radius:10px; padding:12px; } .stat b { display:block; font-size:22px; } .stat small { color:var(--mute); }
   table { width:100%; border-collapse:collapse; } th,td { text-align:right; padding:8px 6px; border-bottom:1px solid var(--line); } th:first-child,td:first-child { text-align:left; } th { color:var(--mute); font-weight:600; font-size:13px; }
   .win { color:var(--win); } .loss { color:var(--loss); } .mute { color:var(--mute); }
-  .code { font:700 22px ui-monospace,monospace; letter-spacing:3px; color:var(--accent); background:#0f1a14; padding:6px 12px; border-radius:8px; }
+  .code { font:700 22px ui-monospace,monospace; letter-spacing:3px; color:var(--accent); background:var(--inset); padding:6px 12px; border-radius:8px; }
   .lobby-item { display:flex; justify-content:space-between; align-items:center; padding:12px; border:1px solid var(--line); border-radius:10px; margin-bottom:8px; cursor:pointer; }
   .lobby-item:hover { border-color:var(--accent); }
   .err { color:var(--loss); min-height:1.2em; margin:8px 0 0; }
   .tabs { display:flex; gap:8px; margin-bottom:12px; }
-  .tabs button { background:transparent; color:var(--mute); border:1px solid var(--line); } .tabs button.on { background:var(--accent); color:#1b1500; }
+  .tabs button { background:transparent; color:var(--mute); border:1px solid var(--line); } .tabs button.on { background:var(--accent); color:var(--on-accent); }
   .login { max-width:360px; margin:8vh auto 0; } .login input { margin-bottom:10px; }
   input[type=checkbox] { width:auto; vertical-align:middle; margin-right:6px; }
   td input { text-align:right; padding:6px; min-width:70px; }
-  .warn { background:#3a2a0a; border:1px solid var(--accent); border-radius:8px; padding:8px 10px; margin-top:10px; font-size:13px; }
+  .warn { background:var(--warn-bg); border:1px solid var(--accent); border-radius:8px; padding:8px 10px; margin-top:10px; font-size:13px; }
   .hero { text-align:center; padding:8px 0 4px; } .hero .big { font-size:44px; font-weight:700; letter-spacing:-1px; } .hero small { color:var(--mute); }
   .chart { width:100%; height:auto; display:block; margin-top:8px; } .chart text { fill:var(--mute); font-size:11px; }
-  .pill { display:inline-block; background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12px; color:var(--mute); }
-  .live { border-color:#7f3a3a; background:linear-gradient(180deg,#2a1a1a 0%,var(--card) 60%); }
+  .pill { display:inline-block; background:var(--inset); border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12px; color:var(--mute); }
+  .live { border-color:var(--live-line); background:linear-gradient(180deg,var(--live-bg) 0%,var(--card) 60%); }
   .dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--loss); margin-right:8px; box-shadow:0 0 0 0 rgba(248,113,113,.7); animation:pulse 1.6s infinite; }
   @keyframes pulse { 70% { box-shadow:0 0 0 10px rgba(248,113,113,0); } 100% { box-shadow:0 0 0 0 rgba(248,113,113,0); } }
-  .ev { border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; background:#12201a; }
+  .ev { border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; background:var(--panel); }
   .ev h3 { color:var(--text); font-size:16px; margin:0 0 2px; } .chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
-  .chip { background:#0f1a14; border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:13px; }
+  .chip { background:var(--inset); border:1px solid var(--line); border-radius:999px; padding:3px 10px; font-size:13px; }
   .tag { color:var(--accent); font-weight:600; }
   nav#nav { display:flex; gap:6px; max-width:860px; margin:0 auto; padding:10px 16px 0; }
   nav#nav a { padding:8px 16px; border-radius:999px; color:var(--mute); text-decoration:none; font-weight:600; font-size:14px; border:1px solid transparent; }
-  nav#nav a.on { background:var(--accent); color:#1b1500; } nav#nav a:not(.on):hover { border-color:var(--line); color:var(--text); }
+  nav#nav a.on { background:var(--accent); color:var(--on-accent); } nav#nav a:not(.on):hover { border-color:var(--line); color:var(--text); }
   .podium { display:flex; align-items:flex-end; justify-content:center; gap:10px; margin:6px 0 18px; }
   .pod { flex:1; max-width:190px; text-align:center; } .pod .who { font-weight:600; margin-bottom:2px; word-break:break-word; } .pod .amt { font-size:15px; margin-bottom:6px; }
   .pod .base { border-radius:10px 10px 0 0; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-size:26px; }
-  .pod.p1 .base { height:112px; background:linear-gradient(180deg,#6b5513,#3b3010); } .pod.p2 .base { height:84px; background:linear-gradient(180deg,#4a5057,#2c3135); } .pod.p3 .base { height:62px; background:linear-gradient(180deg,#6a4220,#3a2512); }
-  .avatar { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent),#c98a1c); color:#1b1500; flex:none; }
+  .pod.p1 .base { height:112px; background:var(--pod1); } .pod.p2 .base { height:84px; background:var(--pod2); } .pod.p3 .base { height:62px; background:var(--pod3); }
+  .avatar { width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; background:linear-gradient(135deg,var(--accent),#c98a1c); color:var(--on-accent); flex:none; }
   .formdots { display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .fd { min-width:54px; text-align:center; padding:5px 8px; border-radius:8px; font-size:13px; font-weight:700; }
-  .fd.w { background:#12331f; color:var(--win); } .fd.l { background:#3a1717; color:var(--loss); } .fd.p { background:#222; color:var(--mute); }
+  .fd.w { background:var(--win-bg); color:var(--win); } .fd.l { background:var(--loss-bg); color:var(--loss); } .fd.p { background:var(--even-bg); color:var(--mute); }
   .badges { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
-  .badge { display:flex; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#12201a; }
-  .badge .ic { font-size:26px; } .badge small { color:var(--mute); display:block; font-size:12px; } .badge.off { opacity:.4; filter:grayscale(1); } .badge.on { border-color:#6b5513; }
-  .insight { padding:10px 12px; border-left:3px solid var(--accent); background:#12201a; border-radius:0 10px 10px 0; margin-bottom:8px; font-size:14px; }
-  .bar { height:8px; border-radius:4px; background:#0f1a14; overflow:hidden; min-width:60px; } .bar i { display:block; height:100%; }
+  .badge { display:flex; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+  .badge .ic { font-size:26px; } .badge small { color:var(--mute); display:block; font-size:12px; } .badge.off { opacity:.4; filter:grayscale(1); } .badge.on { border-color:var(--gold); }
+  .insight { padding:10px 12px; border-left:3px solid var(--accent); background:var(--panel); border-radius:0 10px 10px 0; margin-bottom:8px; font-size:14px; }
+  .bar { height:8px; border-radius:4px; background:var(--inset); overflow:hidden; min-width:60px; } .bar i { display:block; height:100%; }
   .empty { text-align:center; padding:26px 12px; color:var(--mute); }
-  .owe { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#12201a; margin-bottom:8px; flex-wrap:wrap; }
-  .owe.me { border-color:#6b5513; } .owe .arrow { color:var(--accent); font-weight:700; } .owe .amt { margin-left:auto; font-weight:700; font-size:16px; }
+  .owe { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--panel); margin-bottom:8px; flex-wrap:wrap; }
+  .owe.me { border-color:var(--gold); } .owe .arrow { color:var(--accent); font-weight:700; } .owe .amt { margin-left:auto; font-weight:700; font-size:16px; }
   .owe .names { flex:1 1 180px; min-width:0; word-break:break-word; }
-  .summary { padding:12px 14px; border-radius:12px; margin-bottom:12px; font-weight:600; background:#0f1a14; border:1px solid var(--line); }
+  .summary { padding:12px 14px; border-radius:12px; margin-bottom:12px; font-weight:600; background:var(--inset); border:1px solid var(--line); }
   /* ---------- landing ---------- */
   .landing > header, .landing > nav#nav { display:none; }
   .landing main { max-width:1100px; padding-top:0; }
   .lp-top { display:flex; align-items:center; justify-content:space-between; padding:18px 0; }
   .lp-logo { font-size:20px; font-weight:700; } .lp-logo span { color:var(--accent); }
   .lp-hero { display:grid; grid-template-columns:1.15fr .85fr; gap:36px; align-items:center; padding:20px 0 40px; }
-  .lp-eyebrow { display:inline-block; padding:5px 12px; border:1px solid #6b5513; border-radius:999px; color:var(--accent); font-size:13px; font-weight:600; background:#1e1a0a; }
+  .lp-eyebrow { display:inline-block; padding:5px 12px; border:1px solid var(--gold); border-radius:999px; color:var(--accent); font-size:13px; font-weight:600; background:var(--accent-soft); }
   .lp-hero h1 { font-size:clamp(34px,5.2vw,56px); line-height:1.04; letter-spacing:-1.5px; margin:16px 0 14px; }
   .lp-hero h1 em { font-style:normal; background:linear-gradient(90deg,var(--accent),#ff9f5a); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .lp-sub { color:var(--mute); font-size:17px; max-width:520px; margin:0 0 22px; }
@@ -80,29 +92,29 @@
   .pcard { position:absolute; width:104px; height:148px; border-radius:12px; background:#f7f3e8; color:#1a1a1a; box-shadow:0 14px 30px rgba(0,0,0,.45); display:flex; flex-direction:column; justify-content:space-between; padding:8px 10px; font-weight:800; font-size:22px; line-height:1; animation:floaty 6s ease-in-out infinite; }
   .pcard.r { color:#c8312f; } .pcard i { font-style:normal; font-size:46px; align-self:center; } .pcard b { align-self:flex-end; transform:rotate(180deg); }
   .pcard.c1 { left:10px; top:34px; transform:rotate(-14deg); } .pcard.c2 { left:96px; top:14px; transform:rotate(-2deg); animation-delay:-2s; } .pcard.c3 { left:182px; top:30px; transform:rotate(11deg); animation-delay:-4s; }
-  .chip { position:absolute; width:58px; height:58px; border-radius:50%; border:5px dashed rgba(255,255,255,.85); box-shadow:inset 0 0 0 5px rgba(0,0,0,.25), 0 8px 16px rgba(0,0,0,.4); animation:floaty 5s ease-in-out infinite; }
-  .chip.a { background:#c8312f; left:318px; top:96px; } .chip.b { background:#1f6f43; left:366px; top:58px; animation-delay:-1.5s; } .chip.c { background:#2a3f9c; left:340px; top:132px; animation-delay:-3s; }
+  .pchip { position:absolute; width:58px; height:58px; border-radius:50%; border:5px dashed rgba(255,255,255,.85); box-shadow:inset 0 0 0 5px rgba(0,0,0,.25), 0 8px 16px rgba(0,0,0,.4); animation:floaty 5s ease-in-out infinite; }
+  .pchip.a { background:#c8312f; left:318px; top:96px; } .pchip.b { background:#1f6f43; left:366px; top:58px; animation-delay:-1.5s; } .pchip.c { background:#2a3f9c; left:340px; top:132px; animation-delay:-3s; }
   @keyframes floaty { 50% { translate:0 -9px; } }
   .lp-section { padding:34px 0; } .lp-section > h2 { font-size:clamp(24px,3.4vw,34px); letter-spacing:-.6px; margin:0 0 6px; text-align:center; }
   .lp-section > p.lead { text-align:center; color:var(--mute); margin:0 auto 26px; max-width:560px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; counter-reset:st; }
   .step { position:relative; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 18px 18px; counter-increment:st; }
-  .step::before { content:counter(st); position:absolute; top:-14px; left:16px; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#1b1500; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .step::before { content:counter(st); position:absolute; top:-14px; left:16px; width:30px; height:30px; border-radius:50%; background:var(--accent); color:var(--on-accent); font-weight:800; display:flex; align-items:center; justify-content:center; }
   .step b { display:block; margin-bottom:4px; font-size:16px; } .step span { color:var(--mute); font-size:14px; }
   .feats { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
-  .feat { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; transition:transform .2s, border-color .2s; } .feat:hover { transform:translateY(-3px); border-color:#6b5513; }
+  .feat { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; transition:transform .2s, border-color .2s; } .feat:hover { transform:translateY(-3px); border-color:var(--gold); }
   .feat .ic { font-size:28px; display:block; margin-bottom:8px; } .feat b { display:block; margin-bottom:4px; } .feat span { color:var(--mute); font-size:14px; }
-  .lp-preview { display:grid; grid-template-columns:1fr 1fr; gap:26px; align-items:center; background:linear-gradient(135deg,#17261d,#13201a); border:1px solid var(--line); border-radius:22px; padding:28px; }
-  .mock { background:#0f1a14; border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 18px 40px rgba(0,0,0,.4); }
+  .lp-preview { display:grid; grid-template-columns:1fr 1fr; gap:26px; align-items:center; background:linear-gradient(135deg,var(--card),var(--panel)); border:1px solid var(--line); border-radius:22px; padding:28px; }
+  .mock { background:var(--inset); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 18px 40px rgba(0,0,0,.4); }
   .mock .big { font-size:34px; font-weight:800; color:var(--win); letter-spacing:-1px; }
   .lp-foot { text-align:center; color:var(--mute); font-size:13px; padding:30px 0 40px; border-top:1px solid var(--line); margin-top:30px; }
   @media (max-width:860px) { .lp-hero { grid-template-columns:1fr; padding-top:6px; } .lp-preview { grid-template-columns:1fr; padding:20px; } }
-  @media (prefers-reduced-motion:reduce) { .pcard, .chip { animation:none; } .feat { transition:none; } }
+  @media (prefers-reduced-motion:reduce) { .pcard, .pchip { animation:none; } .feat { transition:none; } }
   .lp-art { position:relative; height:300px; display:flex; align-items:center; justify-content:flex-end; overflow:visible; }
   .lp-art .lp-stage { margin:0; transform:scale(1.12); transform-origin:right center; width:430px; max-width:100%; height:200px; }
   .lp-top .btns { display:flex; gap:8px; }
   .modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(5,10,8,.72); backdrop-filter:blur(5px); animation:fadein .15s ease-out; overflow-y:auto; }
-  .modal-card { position:relative; width:100%; max-width:420px; background:var(--card); border:1px solid #2f5442; border-radius:18px; padding:26px 24px 22px; box-shadow:0 30px 80px rgba(0,0,0,.6); animation:popin .2s ease-out; margin:auto; }
+  .modal-card { position:relative; width:100%; max-width:420px; background:var(--card); border:1px solid var(--line-strong); border-radius:18px; padding:26px 24px 22px; box-shadow:0 30px 80px rgba(0,0,0,.6); animation:popin .2s ease-out; margin:auto; }
   .modal-card h2 { font-size:22px; margin:0 0 4px; } .modal-card .sub { color:var(--mute); font-size:14px; margin-bottom:16px; }
   .modal-card input:not([type=checkbox]) { margin-bottom:10px; }
   .modal-x { position:absolute; top:10px; right:10px; width:32px; height:32px; padding:0; border-radius:50%; background:transparent; color:var(--mute); border:1px solid var(--line); font-size:18px; line-height:1; }
@@ -111,11 +123,21 @@
   body.modal-open { overflow:hidden; }
   @media (max-width:860px) { .lp-art { display:none; } }
   @media (prefers-reduced-motion:reduce) { .modal, .modal-card { animation:none; } }
+  #toasts { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:90; display:flex; flex-direction:column; gap:8px; align-items:center; width:min(92vw,420px); pointer-events:none; }
+  .toast { pointer-events:auto; display:flex; gap:10px; align-items:center; background:var(--card); color:var(--text); border:1px solid var(--line-strong); border-left:4px solid var(--win); border-radius:12px; padding:10px 14px; box-shadow:0 10px 30px var(--shadow); font-size:14px; animation:popin .2s ease-out; width:100%; }
+  .toast.err { border-left-color:var(--loss); } .toast button { margin-left:auto; }
+  .dlg-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; flex-wrap:wrap; }
+  .dlg-field { margin-bottom:10px; } .dlg-field label { display:block; font-size:12px; color:var(--mute); margin-bottom:4px; }
+  #dlg { z-index:80; }
+  .recap .winner { display:flex; align-items:center; gap:10px; padding:12px 14px; margin:12px 0; border-radius:14px; background:var(--accent-soft); border:1px solid var(--gold); font-size:18px; }
+  .rrow { display:grid; grid-template-columns:26px 1fr auto; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line); }
+  .rrow .rk { color:var(--mute); font-weight:700; } .rrow .bar { margin-top:5px; } .rrow b.amt { font-size:16px; }
+  #recap { z-index:60; }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
 <body>
-<header><h1 onclick="location.hash='#/'">♠ Poker <span>Hissab</span></h1><div id="who"></div></header>
+<header><h1 onclick="location.hash='#/'">♠ Poker <span>Hissab</span></h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button class="ghost sm" id="themeBtn" aria-label="Toggle light or dark theme" title="Toggle theme"></button><div id="who"></div></div></header>
 <nav id="nav"></nav>
 <main id="app"></main>
 
@@ -128,28 +150,71 @@ const money = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n * 100) / 100
 const signed = n => `<span class="${n > 0 ? 'win' : n < 0 ? 'loss' : 'mute'}">${n > 0 ? '+' : ''}${money(n)}</span>`;
 const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+
+// ---------- theme ----------
+function applyThemeBtn() { const b = document.getElementById('themeBtn'); if (b) b.textContent = document.documentElement.dataset.theme === 'light' ? '🌙' : '☀️'; document.querySelectorAll('.themeSw').forEach(x => x.textContent = document.documentElement.dataset.theme === 'light' ? '🌙' : '☀️'); }
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t; try { localStorage.setItem('theme', t); } catch {}
+  applyThemeBtn();
+}
+document.addEventListener('click', e => { if (e.target.id === 'themeBtn' || e.target.classList.contains('themeSw')) toggleTheme(); });
+
+// ---------- toasts & dialogs (replace the browser's alert / confirm / prompt) ----------
+function toast(msg, kind, action) {
+  let box = document.getElementById('toasts'); if (!box) { box = document.createElement('div'); box.id = 'toasts'; document.body.appendChild(box); }
+  const t = document.createElement('div'); t.className = 'toast' + (kind === 'err' ? ' err' : ''); t.setAttribute('role', 'status');
+  t.innerHTML = `<span>${esc(msg)}</span>`;
+  if (action) { const b = document.createElement('button'); b.className = 'sm'; b.textContent = action.label; b.onclick = () => { t.remove(); action.fn(); }; t.appendChild(b); }
+  box.appendChild(t); setTimeout(() => t.remove(), action ? 9000 : (kind === 'err' ? 5000 : 3200));
+}
+// fields: [{id,label,type,value,placeholder,min,help}] -> resolves to {id: value} or null when cancelled
+function openDialog({ title, text, fields = [], ok = 'OK', cancel = 'Cancel', danger = false }) {
+  return new Promise(resolve => {
+    const m = document.createElement('div'); m.id = 'dlg'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+    m.innerHTML = `<form class="modal-card" style="max-width:400px"><h2>${esc(title)}</h2>${text ? `<div class="sub" style="margin-bottom:12px">${text}</div>` : ''}
+      ${fields.map(f => `<div class="dlg-field"><label for="df-${f.id}">${esc(f.label)}</label><input id="df-${f.id}" type="${f.type || 'text'}" ${f.min !== undefined ? `min="${f.min}"` : ''} step="any" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder || '')}" autocomplete="off">${f.help ? `<div class="mute" style="font-size:12px;margin-top:3px">${esc(f.help)}</div>` : ''}</div>`).join('')}
+      <p class="err" id="dlg-err"></p>
+      <div class="dlg-actions">${cancel ? `<button type="button" class="ghost" id="dlg-cancel">${esc(cancel)}</button>` : ''}<button type="submit" class="${danger ? 'danger' : ''}" id="dlg-ok">${esc(ok)}</button></div></form>`;
+    const close = v => { document.removeEventListener('keydown', keys); m.remove(); if (!document.getElementById('authModal')) document.body.classList.remove('modal-open'); resolve(v); };
+    const keys = e => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } };
+    document.addEventListener('keydown', keys); document.body.appendChild(m); document.body.classList.add('modal-open');
+    m.addEventListener('mousedown', e => { if (e.target === m) close(null); });
+    if (cancel) m.querySelector('#dlg-cancel').onclick = () => close(null);
+    m.querySelector('form').onsubmit = e => { e.preventDefault(); const vals = {}; fields.forEach(f => vals[f.id] = m.querySelector('#df-' + f.id).value); close(vals); };
+    (m.querySelector('input') || m.querySelector('#dlg-ok')).focus();
+  });
+}
+const askConfirm = (text, o = {}) => openDialog({ title: o.title || 'Are you sure?', text: esc(text), ok: o.ok || 'Yes', danger: o.danger !== false }).then(v => !!v);
+const askNumber = async (title, label, value, o = {}) => { const v = await openDialog({ title, text: o.text, fields: [{ id: 'n', label, type: 'number', value, min: o.min ?? 0, help: o.help }], ok: o.ok || 'Save' }); if (!v) return null; const n = Number(v.n); return n > 0 || (o.allowZero && n === 0 && v.n !== '') ? n : (toast('Enter a valid amount', 'err'), null); };
+
 async function api(method, url, body) {
   const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { if (r.status === 401 && token) logoutLocal(); throw new Error(j.error || 'Request failed'); }
+  if (method !== 'GET') lastRev = null; // our own change: the next pulse just re-syncs without reacting
   return j;
 }
 function logoutLocal() { token = null; me = null; localStorage.removeItem('token'); route(); }
 async function logout() { try { await api('POST', '/api/logout'); } catch {} logoutLocal(); }
 const setErr = m => { const e = $('#err'); if (e) e.textContent = m || ''; };
 
-async function route() {
-  if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
-  $('#who').innerHTML = me ? `${esc(me.name)} ${me.role === 'super' ? '<span class="pill">super user</span>' : ''} <button class="ghost sm" onclick="logout()">Log out</button>` : '';
-  if (!me) { $('#nav').innerHTML = ''; return loginView(); }
-  document.body.classList.remove('landing');
-  const h = location.hash;
-  const page = h.startsWith('#/portfolio') ? 'portfolio' : (h.startsWith('#/manage') && me.role === 'super') ? 'manage' : 'home';
+const currentPage = () => { const h = location.hash; return h.startsWith('#/portfolio') ? 'portfolio' : (h.startsWith('#/manage') && me && me.role === 'super') ? 'manage' : 'home'; };
+function renderPage() {
+  const page = currentPage();
   $('#nav').innerHTML = [['home', '#/', 'Home'], ['portfolio', '#/portfolio', 'My Portfolio'], ...(me.role === 'super' ? [['manage', '#/manage', 'Manage']] : [])]
     .map(([k, href, label]) => `<a href="${href}" class="${k === page ? 'on' : ''}">${label}</a>`).join('');
+  return { home: homePage, portfolio: portfolioPage, manage: managePage }[page]();
+}
+async function route() {
+  if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
+  $('#who').innerHTML = me ? `<a href="#" onclick="openAccount();return false" title="Change password" style="color:var(--text);text-decoration:none;margin-right:4px">${esc(me.name)}</a>${me.role === 'super' ? '<span class="pill">super user</span>' : ''} <button class="ghost sm" onclick="logout()">Log out</button>` : '';
+  applyThemeBtn();
+  if (!me) { $('#nav').innerHTML = ''; return loginView(); }
+  document.body.classList.remove('landing'); document.getElementById('authModal')?.remove();
   try { D = await api('GET', '/api/home'); } catch (e) { app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
   window.scrollTo(0, 0);
-  return { home: homePage, portfolio: portfolioPage, manage: managePage }[page]();
+  renderPage(); celebrateTop();
 }
 const dashboard = () => route();
 window.addEventListener('hashchange', route);
@@ -162,7 +227,7 @@ async function loginView(mode, openModal) {
   try { LP = await api('GET', '/api/status'); } catch {}
   app.innerHTML = `
     <div class="lp-top"><div class="lp-logo">♠ Poker <span>Hissab</span></div>
-      <div class="btns"><button class="ghost sm" id="topin">Sign in</button><button class="sm" id="topup">Create account</button></div></div>
+      <div class="btns"><button class="ghost sm themeSw" aria-label="Toggle light or dark theme"></button><button class="ghost sm" id="topin">Sign in</button><button class="sm" id="topup">Create account</button></div></div>
 
     <section class="lp-hero">
       <div>
@@ -174,7 +239,7 @@ async function loginView(mode, openModal) {
       </div>
       <div class="lp-art" aria-hidden="true"><div class="lp-stage">
         <div class="pcard c1">A<i>♠</i><b>A</b></div><div class="pcard c2 r">K<i>♥</i><b>K</b></div><div class="pcard c3">Q<i>♣</i><b>Q</b></div>
-        <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span></div></div>
+        <span class="pchip a"></span><span class="pchip b"></span><span class="pchip c"></span></div></div>
     </section>
 
     <section class="lp-section"><h2>Up and running in three steps</h2><p class="lead">No spreadsheets. No group-chat arguments.</p>
@@ -202,6 +267,7 @@ async function loginView(mode, openModal) {
         <div class="feat"><span class="ic">🔒</span><b>Private by design</b><span>Invite-only lobby. Hashed passwords, and the host can back up everything.</span></div></div></section>
 
     <footer class="lp-foot">♠ Poker Hissab · Play the cards, we'll keep the books.</footer>`;
+  applyThemeBtn();
   $('#topin').onclick = $('#cta2').onclick = () => openAuth('login');
   $('#topup').onclick = $('#cta1').onclick = () => openAuth('register');
   if (openModal) openAuth(mode || 'login');
@@ -227,12 +293,14 @@ function openAuth(mode) {
       ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">`
       : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
     <button style="width:100%;padding:12px" id="go">${reg ? (lobby ? 'Join the lobby' : 'Create lobby & account') : 'Sign in'}</button><p class="err" id="err"></p>
+    ${reg ? '' : '<p style="text-align:center;font-size:13px;margin:0 0 8px"><a href="#" id="forgot" style="color:var(--mute)">Forgot password?</a></p>'}
     <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
   </div>`;
   document.body.appendChild(m); document.body.classList.add('modal-open');
   m.addEventListener('mousedown', e => { if (e.target === m) closeAuth(); });
   document.addEventListener('keydown', authKeys);
   $('#mx').onclick = closeAuth;
+  if ($('#forgot')) $('#forgot').onclick = e => { e.preventDefault(); closeAuth(); openRecover(); };
   $('#sw').onclick = e => { e.preventDefault(); openAuth(reg ? 'login' : 'register'); };
   $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
   const go = async () => {
@@ -264,9 +332,9 @@ function chartSVG(history) {
   const ticks = [lo + pad, 0, hi - pad].filter((v, i, a) => a.indexOf(v) === i);
   const step = Math.ceil(pts.length / 6);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative profit and loss by game night">
-    ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? '#4d6b5b' : '#254033'}" ${t === 0 ? '' : 'stroke-dasharray="3 4"'}/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${money(Math.round(t))}</text>`).join('')}
+    ${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? 'var(--axis)' : 'var(--line)'}" ${t === 0 ? '' : 'stroke-dasharray="3 4"'}/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${money(Math.round(t))}</text>`).join('')}
     <path d="${area}" fill="${col}" opacity=".13"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/>
-    ${pts.map((p, i) => i ? `<circle cx="${x(i)}" cy="${y(p.v)}" r="5" fill="${col}" stroke="#17261d" stroke-width="2"><title>${fmtDate(p.date)}: ${p.net > 0 ? '+' : ''}${money(p.net)} (total ${money(p.v)})</title></circle>` : '').join('')}
+    ${pts.map((p, i) => i ? `<circle cx="${x(i)}" cy="${y(p.v)}" r="5" fill="${col}" stroke="var(--card)" stroke-width="2"><title>${fmtDate(p.date)}: ${p.net > 0 ? '+' : ''}${money(p.net)} (total ${money(p.v)})</title></circle>` : '').join('')}
     ${pts.map((p, i) => i && (i - 1) % step === 0 ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${new Date(p.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</text>` : '').join('')}
   </svg>`;
 }
@@ -281,7 +349,7 @@ function barsSVG(history) {
   const slot = (W - L - R) / history.length, bw = Math.min(46, slot * 0.66);
   const step = Math.ceil(history.length / 7);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Result of each night">
-    <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#4d6b5b"/>
+    <line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)"/>
     <text x="${L - 8}" y="${y(hi) + 4}" text-anchor="end">${money(Math.round(hi))}</text><text x="${L - 8}" y="${y(lo) + 4}" text-anchor="end">${money(Math.round(lo))}</text>
     ${history.map((h, i) => { const x = L + slot * i + (slot - bw) / 2, y0 = y(0), y1 = y(h.net);
       return `<rect x="${x.toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2, Math.abs(y1 - y0)).toFixed(1)}" rx="3" fill="${h.net >= 0 ? 'var(--win)' : 'var(--loss)'}" opacity=".9"><title>${fmtDate(h.date)}: ${h.net > 0 ? '+' : ''}${money(h.net)}</title></rect>`
@@ -289,6 +357,38 @@ function barsSVG(history) {
   </svg>`;
 }
 
+
+// ---------- seasons (calendar quarters) and rivalries, computed from every night ----------
+const seasonKey = d => { const [y, m] = d.split('-').map(Number); return `${y}-Q${Math.ceil(m / 3)}`; };
+const seasonLabel = k => { const [y, q] = k.split('-Q'); return `Q${q} ${y}`; };
+const seasonsList = () => [...new Set(D.nights.map(n => seasonKey(n.date)))].sort().reverse();
+let LB = (() => { try { return localStorage.getItem('ph_scope') || 'all'; } catch { return 'all'; } })();
+function standingsFor(scope) {
+  const map = {}; D.members.forEach(m => map[m.id] = { id: m.id, name: m.name, games: 0, wins: 0, net: 0, buyIn: 0, cashOut: 0 });
+  D.nights.forEach(n => { if (scope !== 'all' && seasonKey(n.date) !== scope) return; n.entries.forEach(e => { const t = map[e.userId]; if (!t) return; t.games++; if (e.net > 0) t.wins++; t.net += e.net; t.buyIn += e.buyIn; t.cashOut += e.cashOut; }); });
+  let arr = Object.values(map); if (scope !== 'all') arr = arr.filter(p => p.games > 0);
+  return arr.sort((a, b) => b.net - a.net);
+}
+function setScope(k) { LB = k; try { localStorage.setItem('ph_scope', k); } catch {} homePage(); }
+const signedText = n => (n > 0 ? '+' : n < 0 ? '-' : '') + money(Math.abs(n));
+function rivalries() {
+  const my = D.user.id, map = {}, ids = new Set(D.members.map(m => m.id));
+  D.nights.forEach(n => { const mine = n.entries.find(e => e.userId === my); if (!mine) return;
+    n.entries.forEach(e => { if (e.userId === my || !ids.has(e.userId)) return;
+      const r = map[e.userId] = map[e.userId] || { id: e.userId, name: e.name, n: 0, ahead: 0, behind: 0, even: 0, edge: 0 };
+      const d = mine.net - e.net; r.n++; r.edge += d; if (d > 0) r.ahead++; else if (d < 0) r.behind++; else r.even++; }); });
+  return Object.values(map).sort((a, b) => b.n - a.n || b.edge - a.edge);
+}
+function rivalryCard() {
+  const rv = rivalries(); if (!rv.length) return '';
+  const nem = rv.filter(r => r.n >= 2 && r.edge < 0).sort((a, b) => a.edge - b.edge)[0], fav = rv.filter(r => r.n >= 2 && r.edge > 0).sort((a, b) => b.edge - a.edge)[0];
+  return `<div class="card"><h2>⚔️ Rivalries</h2><div class="mute" style="font-size:13px;margin:-6px 0 12px">On nights you both played, who finished ahead? The edge is the total difference in your results.</div>
+    ${nem || fav ? `<div class="row" style="margin-bottom:10px;gap:8px">${fav ? `<span class="chip">😈 Favorite opponent: <b>${esc(fav.name)}</b> <span class="win">${signedText(fav.edge)}</span></span>` : ''}${nem ? `<span class="chip">👹 Nemesis: <b>${esc(nem.name)}</b> <span class="loss">${signedText(nem.edge)}</span></span>` : ''}</div>` : ''}
+    ${rv.map(r => { const tot = r.n || 1; return `<div class="owe" style="margin-bottom:6px"><div class="names"><b>${esc(r.name)}</b> <span class="mute" style="font-size:12px">${r.n} night${r.n === 1 ? '' : 's'} together</span>
+      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;background:var(--inset)"><i style="width:${100 * r.ahead / tot}%;background:var(--win)"></i><i style="width:${100 * r.even / tot}%;background:var(--mute);opacity:.5"></i><i style="width:${100 * r.behind / tot}%;background:var(--loss)"></i></div>
+      <div class="mute" style="font-size:12px;margin-top:3px">You finished ahead ${r.ahead}, behind ${r.behind}${r.even ? `, level ${r.even}` : ''}</div></div>
+      <span class="amt ${r.edge > 0 ? 'win' : r.edge < 0 ? 'loss' : 'mute'}">${signedText(r.edge)}</span></div>`; }).join('')}</div>`;
+}
 
 // ---------- settle-up: who owes whom ----------
 function oweRow(t, sup) {
@@ -316,13 +416,11 @@ function oweCard(full) {
         ${sup ? `<button class="ghost sm" onclick="undoPayment('${p.id}')">Undo</button>` : ''}</div>`).join('')}</details>` : ''}</div>`;
 }
 async function markPaid(from, to, amount) {
-  const v = prompt('Amount that was paid:', amount);
-  if (v === null) return;
-  const n = Number(v);
-  if (!(n > 0)) return alert('Enter an amount greater than 0');
-  try { await api('POST', '/api/payments', { from, to, amount: n }); route(); } catch (e) { alert(e.message); }
+  const n = await askNumber('Mark as paid', 'Amount that was paid ($)', amount, { ok: 'Mark paid', help: 'Change it if only part was paid.' });
+  if (n === null) return;
+  try { await api('POST', '/api/payments', { from, to, amount: n }); toast('Payment recorded ✓'); route(); } catch (e) { toast(e.message, 'err'); }
 }
-async function undoPayment(id) { if (confirm('Undo this payment?')) { await api('DELETE', '/api/payments/' + id); route(); } }
+async function undoPayment(id) { if (await askConfirm('Undo this payment?', { ok: 'Undo it' })) { await api('DELETE', '/api/payments/' + id); toast('Payment undone'); route(); } }
 
 // ---------- HOME: events, leaderboard, lobby highlights ----------
 function podiumHTML(st) {
@@ -332,12 +430,18 @@ function podiumHTML(st) {
   return `<div class="podium">${order.map(i => { const p = top[i]; return `<div class="pod p${i + 1}"><div class="who">${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</div><div class="amt">${signed(p.net)}</div><div class="base">${medal[i]}</div></div>`; }).join('')}</div>`;
 }
 function homePage() {
-  const H = D.highlights, st = D.standings;
+  const H = D.highlights, seasons = seasonsList();
+  if (LB !== 'all' && !seasons.includes(LB)) LB = 'all';
+  const st = standingsFor(LB);
+  const recentNights = [...D.nights].reverse().slice(0, 5).map(n => ({ ...n, top: [...n.entries].sort((a, b) => b.net - a.net)[0] }));
   app.innerHTML = `
     <div id="eventsBox">${eventsHTML()}</div>
 
+    ${D.lobby.notes ? `<div class="card"><details open><summary style="font-weight:700;font-size:16px">📜 House rules</summary><div style="white-space:pre-wrap;margin-top:8px;font-size:14.5px">${esc(D.lobby.notes)}</div></details></div>` : ''}
+
     <div class="card"><h2>🏆 Leaderboard</h2>
-      ${st.length ? podiumHTML(st) : ''}
+      ${seasons.length ? `<div class="tabs" style="flex-wrap:wrap;margin:-4px 0 12px"><button class="${LB === 'all' ? 'on' : ''}" onclick="setScope('all')">All time</button>${seasons.map((k, i) => `<button class="${LB === k ? 'on' : ''}" onclick="setScope('${k}')">${seasonLabel(k)}${i === 0 ? ' · current' : ''}</button>`).join('')}</div>` : ''}
+      ${st.length ? podiumHTML(st) : '<p class="mute">No games in this period yet.</p>'}
       <table><tr><th>#</th><th>Player</th><th>Nights</th><th>Win rate</th><th>Net</th></tr>
       ${st.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.name)}${p.id === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${p.games}</td><td>${p.games ? Math.round(100 * p.wins / p.games) + '%' : '—'}</td><td><b>${signed(p.net)}</b></td></tr>`).join('')}</table></div>
 
@@ -351,8 +455,8 @@ function homePage() {
         <div class="stat"><small>Toughest night</small><b>${H.biggestLoss ? signed(H.biggestLoss.amount) : '—'}</b><small>${H.biggestLoss ? esc(H.biggestLoss.name) + ' · ' + fmtDate(H.biggestLoss.date) : ''}</small></div></div></div>
 
     <div class="card"><h2>🕒 Recent nights</h2>
-      ${H.recent.length ? `<table><tr><th>Date</th><th>Players</th><th>Pot</th><th>Night's winner</th></tr>
-        ${H.recent.map(r => `<tr><td>${fmtDate(r.date)}${r.note ? `<div class="mute" style="font-size:12px">${esc(r.note)}</div>` : ''}</td><td>${r.players}</td><td>${money(r.pot)}</td><td>${r.winner ? `${esc(r.winner.name)} ${signed(r.winner.net)}` : '—'}</td></tr>`).join('')}</table>` : '<p class="mute">No games recorded yet.</p>'}</div>`;
+      ${recentNights.length ? `<table><tr><th>Date</th><th>Players</th><th>Pot</th><th>Night's winner</th><th></th></tr>
+        ${recentNights.map(r => `<tr><td>${fmtDate(r.date)}${r.note ? `<div class="mute" style="font-size:12px">${esc(r.note)}</div>` : ''}</td><td>${r.entries.length}</td><td>${money(r.pot)}</td><td>${r.top && r.top.net > 0 ? `${esc(r.top.name)} ${signed(r.top.net)}` : '—'}</td><td><button class="ghost sm" onclick="openRecap('${r.id}')">Recap</button></td></tr>`).join('')}</table>` : '<p class="mute">No games recorded yet.</p>'}</div>`;
 }
 
 // ---------- PORTFOLIO: personal stats ----------
@@ -422,12 +526,14 @@ function portfolioPage() {
 
     <div class="card"><h2>🏅 Badges</h2><div class="badges">${badges.map(b => `<div class="badge ${b.on ? 'on' : 'off'}"><span class="ic">${b.ic}</span><div><b>${b.t}</b><small>${b.d}</small></div></div>`).join('')}</div></div>
 
+    ${rivalryCard()}
+
     ${monthRows.length ? `<div class="card"><h2>🗓️ By month</h2><table><tr><th>Month</th><th>Nights</th><th>Result</th></tr>
       ${monthRows.map(([k, v]) => `<tr><td>${new Date(k + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</td><td>${v.n}</td><td><b>${signed(v.net)}</b></td></tr>`).join('')}</table></div>` : ''}
 
     <div class="card"><h2>🗒️ Every night you played</h2>
       ${n ? `<table><tr><th>Date</th><th>In</th><th>Out</th><th></th><th>Won / lost</th></tr>
-        ${[...hist].reverse().map(h => `<tr><td>${fmtDate(h.date)}${h.note ? `<div class="mute" style="font-size:12px">${esc(h.note)}</div>` : ''}</td><td>${money(h.buyIn)}</td><td>${money(h.cashOut)}</td>
+        ${[...hist].reverse().map(h => `<tr><td>${fmtDate(h.date)} <a href="#" class="mute" style="font-size:12px" onclick="openRecap('${h.sessionId}');return false">recap</a>${h.note ? `<div class="mute" style="font-size:12px">${esc(h.note)}</div>` : ''}</td><td>${money(h.buyIn)}</td><td>${money(h.cashOut)}</td>
           <td style="width:90px"><div class="bar"><i style="width:${Math.round(100 * Math.abs(h.net) / maxAbs)}%;background:${h.net >= 0 ? 'var(--win)' : 'var(--loss)'}"></i></div></td><td><b>${signed(h.net)}</b></td></tr>`).join('')}</table>`
         : '<p class="mute">Nothing yet. Your nights will appear here after the super user records a game you played in.</p>'}</div>`;
 }
@@ -437,9 +543,14 @@ function managePage() {
   const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
   app.innerHTML = `
     <div class="card"><div class="row" style="justify-content:space-between"><b>Invite players</b>
-      <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="sm" id="sh">Share</button></div></div>
+      <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="ghost sm" id="wa">💬 WhatsApp</button><button class="sm" id="sh">Share</button></div></div>
       <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account” and enter the code.</p>
-      <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div></div>
+      <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" title="Reset password" onclick="resetPw('${x.id}','${esc(x.name).replace(/'/g, '')}');return false">🔑</a> <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div>
+      <div class="mute" style="font-size:12px;margin-top:8px">🔑 resets a player's password if they forget it.</div></div>
+
+    <div class="card"><h2>📜 House rules &amp; notes</h2><div class="mute" style="font-size:13px;margin:-6px 0 10px">Everyone in the lobby sees this on the Home page: blinds, buy-in rules, snacks, anything.</div>
+      <textarea id="notes" rows="5" maxlength="2000" placeholder="e.g. Blinds 1/2. Rebuys until 10pm. No phones at the table.">${esc(D.lobby.notes)}</textarea>
+      <div class="row" style="margin-top:8px"><button id="savenotes">Save rules</button></div></div>
 
     <div class="card"><h2>Schedule an event</h2>
       <div class="mute" style="font-size:13px;margin:-6px 0 12px">Fill in everything marked * to create the event.</div>
@@ -464,10 +575,12 @@ function managePage() {
       <div class="row"><button class="ghost" id="bk">Download backup</button><label class="ghost" style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:9px 14px">Restore from file<input type="file" id="rs" accept=".json" hidden></label></div><p class="err" id="err3"></p></div>`;
 
   const msg = `Join my poker lobby "${D.lobby.name}" — code: ${D.lobby.code}\n${location.origin}`;
-  $('#cp').onclick = () => { navigator.clipboard?.writeText(D.lobby.code); $('#cp').textContent = 'Copied ✓'; };
+  $('#cp').onclick = () => { navigator.clipboard?.writeText(D.lobby.code); toast('Lobby code copied ✓'); };
+  $('#savenotes').onclick = saveNotes;
+  $('#wa').onclick = () => waOpen(msg);
   $('#sh').onclick = async () => {
     if (navigator.share) { try { await navigator.share({ title: D.lobby.name, text: msg }); } catch {} }
-    else { navigator.clipboard?.writeText(msg); $('#sh').textContent = 'Message copied ✓'; }
+    else { navigator.clipboard?.writeText(msg); toast('Invite message copied ✓'); }
   };
   $('#bk').onclick = async () => {
     const data = await api('GET', '/api/backup');
@@ -477,7 +590,7 @@ function managePage() {
   };
   $('#rs').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    if (!confirm('Replace ALL current data with this backup?')) return;
+    if (!(await askConfirm('This replaces ALL current data with the backup file.', { title: 'Restore backup?', ok: 'Replace everything' }))) return;
     try { await api('POST', '/api/restore', JSON.parse(await f.text())); dashboard(); } catch (x) { $('#err3').textContent = x.message; }
   };
   $('#ecreate').onclick = async () => {
@@ -531,8 +644,66 @@ function sessionForm(s) {
   };
 }
 function editSession(sid) { sessionForm(D.sessions.find(x => x.id === sid)); $('#formTitle').scrollIntoView({ behavior: 'smooth' }); }
-async function delSession(sid) { if (confirm('Delete this game?')) { await api('DELETE', '/api/sessions/' + sid); dashboard(); } }
-async function rmMember(u) { if (confirm('Remove this player? Their past games stop counting.')) { await api('DELETE', '/api/members/' + u); dashboard(); } }
+async function delSession(sid) { if (await askConfirm('Delete this game? It disappears from everyone\'s history.', { ok: 'Delete game' })) { await api('DELETE', '/api/sessions/' + sid); toast('Game deleted'); dashboard(); } }
+async function rmMember(u) { if (await askConfirm('Remove this player? Their past games stop counting.', { ok: 'Remove player' })) { await api('DELETE', '/api/members/' + u); dashboard(); } }
+
+// ---------- cash out (leave the table early) ----------
+async function cashOut(id, u) {
+  const e = D.events.find(x => x.id === id), p = e.players.find(x => x.userId === u);
+  const n = await askNumber(`Cash out ${u === D.user.id ? '' : p.name}`.trim(), 'Cash-out amount ($)', '', { allowZero: true, min: 0, ok: 'Cash out', help: `${money(e.onTable)} is still on the table. You put in ${money(p.total)}. Enter 0 if you lost it all.` });
+  if (n === null) return;
+  try { await api('POST', `/api/events/${id}/cashout`, { userId: u, amount: n }); toast(`${u === D.user.id ? 'You' : p.name} cashed out ✓`); refreshEvents(); } catch (x) { toast(x.message, 'err'); }
+}
+async function undoCashOut(id, u) {
+  if (!(await askConfirm('Put this player back in the game?', { ok: 'Undo cash-out', danger: false }))) return;
+  try { await api('DELETE', `/api/events/${id}/cashout`, { userId: u }); refreshEvents(); } catch (x) { toast(x.message, 'err'); }
+}
+
+// ---------- share to WhatsApp / add to calendar ----------
+const waOpen = text => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+function shareEvent(id) {
+  const e = D.events.find(x => x.id === id);
+  const text = e.status === 'live'
+    ? `🔴 ${e.title} is live right now${e.location ? ' at ' + e.location : ''}! Pot is ${money(e.pot)}. Min buy-in ${money(e.minBuyIn)}. Jump in: ${location.origin}`
+    : `🃏 ${e.title}\n📅 ${evWhen(e)}${e.location ? '\n📍 ' + e.location : ''}\n💵 Min buy-in ${e.minBuyIn ? money(e.minBuyIn) : 'none'}${e.maxSeats ? `\n🪑 ${e.maxSeats} seats` : ''}\nJoin here: ${location.origin}`;
+  waOpen(text);
+}
+function calEvent(id) {
+  const e = D.events.find(x => x.id === id);
+  const pad = n => String(n).padStart(2, '0'), fmt = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const start = new Date(`${e.date}T${e.time || '19:00'}:00`), end = new Date(start.getTime() + 4 * 36e5);
+  const esc2 = t => String(t || '').replace(/\\/g, '\\\\').replace(/[,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Poker Hissab//EN', 'BEGIN:VEVENT', `UID:${e.id}@poker-hissab`, `DTSTAMP:${fmt(new Date())}`,
+    `DTSTART:${fmt(start)}`, `DTEND:${fmt(end)}`, `SUMMARY:${esc2('🃏 ' + e.title)}`, `LOCATION:${esc2(e.location)}`,
+    `DESCRIPTION:${esc2(`Minimum buy-in ${money(e.minBuyIn)}. Join and track the night: ${location.origin}`)}`,
+    'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:Poker night soon', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = 'poker-night.ics'; a.click();
+  toast('Calendar file downloaded. Open it to add the event.');
+}
+
+// ---------- account: change password; forgot password; super user resets a player ----------
+async function openAccount() {
+  const v = await openDialog({ title: 'Change password', fields: [
+    { id: 'cur', label: 'Current password', type: 'password' }, { id: 'pw', label: 'New password', type: 'password', help: 'At least 4 characters.' }, { id: 'pw2', label: 'Repeat new password', type: 'password' }], ok: 'Change password' });
+  if (!v) return;
+  if (v.pw !== v.pw2) return toast('The new passwords don\'t match', 'err');
+  try { await api('POST', '/api/me/password', { current: v.cur, password: v.pw }); toast('Password changed ✓'); } catch (e) { toast(e.message, 'err'); }
+}
+async function openRecover() {
+  const v = await openDialog({ title: 'Forgot your password?', text: 'Players: ask your host to reset it for you. The host can use the recovery code from the server settings.', fields: [
+    { id: 'u', label: 'Username' }, { id: 'code', label: 'Recovery code' }, { id: 'pw', label: 'New password', type: 'password' }], ok: 'Reset password' });
+  if (!v) return;
+  try { await api('POST', '/api/recover', { username: v.u, code: v.code, password: v.pw }); toast('Password reset. You can sign in now ✓'); openAuth('login'); } catch (e) { toast(e.message, 'err'); openAuth('login'); }
+}
+async function resetPw(id, name) {
+  const v = await openDialog({ title: `Reset ${name}'s password`, text: 'They will be signed out everywhere. Tell them the new password.', fields: [{ id: 'pw', label: 'New password', type: 'text', help: 'At least 4 characters.' }], ok: 'Reset password' });
+  if (!v) return;
+  try { await api('POST', `/api/users/${id}/password`, { password: v.pw }); toast(`Password reset for ${name} ✓`); } catch (e) { toast(e.message, 'err'); }
+}
+async function saveNotes() {
+  try { await api('PUT', '/api/lobby/notes', { notes: $('#notes').value }); toast('House rules saved ✓'); } catch (e) { toast(e.message, 'err'); }
+}
 
 // ---------- events: upcoming + live session ----------
 const fmtTime = t => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${(h % 12) || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
@@ -559,22 +730,24 @@ function eventHTML(e, sup) {
     : `<div class="row" style="justify-content:space-between"><div><span class="tag">UPCOMING</span><h3 style="margin-top:2px">${esc(e.title)}</h3><div class="mute">${evWhen(e)}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
         <div style="text-align:right"><div class="stat" style="padding:8px 12px"><small>Min buy-in</small><b style="font-size:18px">${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div></div>`;
   const stats = live
-    ? `<div class="grid" style="margin-top:12px"><div class="stat"><small>Pot</small><b>${money(e.pot)}</b></div><div class="stat"><small>Players</small><b>${e.players.length}</b></div><div class="stat"><small>Min buy-in</small><b>${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div>` : '';
+    ? `<div class="grid" style="margin-top:12px"><div class="stat"><small>Pot</small><b>${money(e.pot)}</b></div><div class="stat"><small>On the table</small><b>${money(e.onTable)}</b></div><div class="stat"><small>Players</small><b>${e.players.length}</b></div><div class="stat"><small>Min buy-in</small><b>${e.minBuyIn ? money(e.minBuyIn) : 'None'}</b></div></div>` : '';
   const canAct = p => sup || p.userId === D.user.id;
   const table = live ? `<table style="margin-top:12px"><tr><th>Player</th><th>Buy-in</th><th>Rebuys</th><th>Total</th></tr>
-      ${e.players.map(p => `<tr><td>${esc(p.name)}${p.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}</td><td>${money(p.buyIn)}</td><td>${p.rebuys ? money(p.rebuys) : '—'}</td><td><b>${money(p.total)}</b></td></tr>
-        ${canAct(p) ? `<tr><td colspan="4" style="text-align:left;padding-top:2px"><div class="row" style="gap:6px">
+      ${e.players.map(p => `<tr><td>${esc(p.name)}${p.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}${p.cashOut !== null ? ` <span class="pill">cashed out ${money(p.cashOut)}</span>` : ''}</td><td>${money(p.buyIn)}</td><td>${p.rebuys ? money(p.rebuys) : '—'}</td><td><b>${money(p.total)}</b></td></tr>
+        ${canAct(p) ? (p.cashOut !== null ? `<tr><td colspan="4" style="text-align:left;padding-top:2px"><div class="row" style="gap:6px"><button class="ghost sm" onclick="undoCashOut('${e.id}','${p.userId}')">Undo cash-out</button></div></td></tr>` : `<tr><td colspan="4" style="text-align:left;padding-top:2px"><div class="row" style="gap:6px">
           <input type="number" id="rb-${e.id}-${p.userId}" min="1" step="any" placeholder="Rebuy $" style="width:100px;flex:0 0 100px;padding:6px">
           <button class="sm" onclick="rebuy('${e.id}','${p.userId}')">Rebuy</button>
           <button class="ghost sm" onclick="editEntry('${e.id}','${p.userId}')">Edit buy-in</button>
+          <button class="ghost sm" onclick="cashOut('${e.id}','${p.userId}')">Cash out</button>
           ${p.lastRebuy ? `<button class="ghost sm" onclick="undoRebuy('${e.id}','${p.userId}')">Undo last rebuy (${money(p.lastRebuy)})</button>` : ''}
-          ${sup && p.userId !== D.user.id ? `<a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">Remove</a>` : ''}</div></td></tr>` : ''}`).join('')}</table>
-      ${e.log && e.log.length ? `<details style="margin-top:8px"><summary class="mute" style="font-size:13px">Activity (${e.log.length})</summary>${e.log.map(l => `<div class="mute" style="font-size:12.5px;padding:3px 0">${new Date(l.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · <b style="color:var(--text)">${esc(l.who)}</b> ${{ join: 'joined with', rebuy: 'rebought', edit: 'set buy-in to', undo: 'undid a rebuy of' }[l.type]} ${money(l.amount)}${l.by ? ` <i>(by ${esc(l.by)})</i>` : ''}</div>`).join('')}</details>` : ''}`
+          ${sup && p.userId !== D.user.id ? `<a href="#" class="loss" onclick="removePlayer('${e.id}','${p.userId}');return false">Remove</a>` : ''}</div></td></tr>`) : ''}`).join('')}</table>
+      ${e.log && e.log.length ? `<details style="margin-top:8px"><summary class="mute" style="font-size:13px">Activity (${e.log.length})</summary>${e.log.map(l => `<div class="mute" style="font-size:12.5px;padding:3px 0">${new Date(l.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · <b style="color:var(--text)">${esc(l.who)}</b> ${{ join: 'joined with', rebuy: 'rebought', edit: 'set buy-in to', undo: 'undid a rebuy of', cashout: 'cashed out with', uncash: 'undid a cash-out of' }[l.type]} ${money(l.amount)}${l.by ? ` <i>(by ${esc(l.by)})</i>` : ''}</div>`).join('')}</details>` : ''}`
     : `<div class="chips">${chips}</div><div class="mute" style="font-size:13px">${e.players.length} joined${e.seatsLeft !== null ? ` · ${e.seatsLeft} seat${e.seatsLeft === 1 ? '' : 's'} left` : ''}</div>`;
   const supBtns = sup ? `<div class="row" style="margin-top:12px">${live
     ? `<button onclick="openSettle('${e.id}')">End session &amp; enter cash-outs</button>`
     : `<button onclick="startEvent('${e.id}')">Start session</button><button class="danger sm" onclick="cancelEvent('${e.id}')">Cancel event</button>`}</div><div id="settle-${e.id}"></div>` : '';
-  return `<div class="card ${live ? 'live' : ''}">${head}${stats}${table}${joinBox(e)}<p class="err" id="se-${e.id}"></p>${supBtns}</div>`;
+  const shareRow = `<div class="row" style="margin-top:12px;gap:6px"><button class="ghost sm" onclick="shareEvent('${e.id}')">💬 Share on WhatsApp</button>${live ? '' : `<button class="ghost sm" onclick="calEvent('${e.id}')">📅 Add to calendar</button>`}</div>`;
+  return `<div class="card ${live ? 'live' : ''}">${head}${stats}${table}${joinBox(e)}<p class="err" id="se-${e.id}"></p>${shareRow}${supBtns}</div>`;
 }
 function eventsHTML() {
   const evs = (D && D.events) || [];
@@ -589,12 +762,12 @@ async function joinEvent(id) {
   if (v < e.minBuyIn) return $('#je-' + id).textContent = `Minimum buy-in is ${money(e.minBuyIn)}`;
   try { await api('POST', `/api/events/${id}/join`, { buyIn: v }); refreshEvents(); } catch (x) { $('#je-' + id).textContent = x.message; }
 }
-async function leaveEvent(id) { try { await api('DELETE', `/api/events/${id}/join`); refreshEvents(); } catch (x) { alert(x.message); } }
+async function leaveEvent(id) { try { await api('DELETE', `/api/events/${id}/join`); toast('You left the event'); refreshEvents(); } catch (x) { toast(x.message, 'err'); } }
 async function startEvent(id) {
   try { await api('POST', `/api/events/${id}/start`); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
 }
-async function cancelEvent(id) { if (confirm('Cancel this event?')) { await api('DELETE', '/api/events/' + id); refreshEvents(); } }
-async function removePlayer(id, u) { if (confirm('Remove this player from the event?')) { await api('DELETE', `/api/events/${id}/players/${u}`); refreshEvents(); } }
+async function cancelEvent(id) { if (await askConfirm('Cancel this event? Everyone who joined is removed.', { ok: 'Cancel event' })) { await api('DELETE', '/api/events/' + id); refreshEvents(); } }
+async function removePlayer(id, u) { if (await askConfirm('Remove this player from the event?', { ok: 'Remove' })) { await api('DELETE', `/api/events/${id}/players/${u}`); refreshEvents(); } }
 async function rebuy(id, u) {
   const amt = +$(`#rb-${id}-${u}`).value;
   if (!(amt > 0)) return $('#se-' + id).textContent = 'Enter the rebuy amount first';
@@ -602,21 +775,19 @@ async function rebuy(id, u) {
 }
 async function editEntry(id, u) {
   const e = D.events.find(x => x.id === id), p = e.players.find(x => x.userId === u);
-  const v = prompt(`New buy-in amount${e.minBuyIn ? ` (minimum ${money(e.minBuyIn)})` : ''}. Rebuys are kept separately.`, p.buyIn);
-  if (v === null) return;
-  const n = Number(v);
-  if (!(n > 0)) return alert('Enter an amount greater than 0');
-  try { await api('PUT', `/api/events/${id}/entry`, { userId: u, buyIn: n }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
+  const n = await askNumber('Edit buy-in', 'Buy-in amount ($)', p.buyIn, { help: `${e.minBuyIn ? `Minimum ${money(e.minBuyIn)}. ` : ''}Rebuys are kept separately.` });
+  if (n === null) return;
+  try { await api('PUT', `/api/events/${id}/entry`, { userId: u, buyIn: n }); toast('Buy-in updated ✓'); refreshEvents(); } catch (x) { toast(x.message, 'err'); }
 }
 async function undoRebuy(id, u) {
-  if (!confirm('Undo the last rebuy?')) return;
+  if (!(await askConfirm('Undo the last rebuy?', { ok: 'Undo rebuy' }))) return;
   try { await api('DELETE', `/api/events/${id}/rebuy/last`, { userId: u }); refreshEvents(); } catch (x) { $('#se-' + id).textContent = x.message; }
 }
 function openSettle(id) {
   const e = D.events.find(x => x.id === id), box = $('#settle-' + id);
   box.innerHTML = `<div class="warn" style="margin-top:12px"><b>End session</b> — enter what each player cashed out with.</div>
     <table><tr><th>Player</th><th>Total in</th><th>Cash-out</th><th>Net</th></tr>
-    ${e.players.map(p => `<tr data-u="${p.userId}" data-in="${p.total}"><td>${esc(p.name)}</td><td>${money(p.total)}</td><td><input type="number" min="0" step="any" class="co" placeholder="0"></td><td class="net">—</td></tr>`).join('')}
+    ${e.players.map(p => `<tr data-u="${p.userId}" data-in="${p.total}"><td>${esc(p.name)}</td><td>${money(p.total)}</td><td><input type="number" min="0" step="any" class="co" placeholder="0" value="${p.cashOut !== null ? p.cashOut : ''}"></td><td class="net">—</td></tr>`).join('')}
     <tr><td><b>Total</b></td><td>${money(e.pot)}</td><td id="so-${id}">—</td><td></td></tr></table><div id="sc-${id}"></div>
     <div class="row" style="margin-top:10px"><button id="sf-${id}">Save &amp; end session</button><button class="ghost" onclick="$('#settle-${id}').innerHTML=''">Cancel</button></div>`;
   const calc = () => {
@@ -628,27 +799,121 @@ function openSettle(id) {
   box.oninput = calc; calc();
   $('#sf-' + id).onclick = async () => {
     const cashOuts = {}; box.querySelectorAll('tr[data-u]').forEach(tr => cashOuts[tr.dataset.u] = +tr.querySelector('.co').value || 0);
-    try { await api('POST', `/api/events/${id}/finish`, { cashOuts }); dashboard(); } catch (x) { $('#se-' + id).textContent = x.message; }
+    try { const fin = await api('POST', `/api/events/${id}/finish`, { cashOuts }); await route(); toast('Session saved to history ✓'); setTimeout(() => openRecap(fin.sessionId, true), 350); } catch (x) { $('#se-' + id).textContent = x.message; }
   };
 }
 
-// keep the live session fresh for everyone without disturbing forms
-setInterval(async () => {
-  if (!token || !me || !D) return;
-  const box = $('#eventsBox'); if (!box) return;
+// ---------- confetti ----------
+function confetti(count = 140) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = document.createElement('canvas'), dpr = devicePixelRatio || 1;
+  c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:120';
+  c.width = innerWidth * dpr; c.height = innerHeight * dpr; document.body.appendChild(c);
+  const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const cols = ['#f2c14e', '#4ade80', '#f87171', '#ffffff', '#7dd3fc', '#c084fc', '#fb923c'];
+  const ps = Array.from({ length: count }, () => ({ x: innerWidth / 2 + (Math.random() - .5) * 240, y: innerHeight * .38, vx: (Math.random() - .5) * 15, vy: -Math.random() * 15 - 4, g: .32 + Math.random() * .2, s: 6 + Math.random() * 7, r: Math.random() * 6, vr: (Math.random() - .5) * .45, col: cols[Math.floor(Math.random() * cols.length)] }));
+  const t0 = performance.now();
+  (function frame(t) {
+    const age = t - t0; g.clearRect(0, 0, innerWidth, innerHeight);
+    ps.forEach(p => { p.vy += p.g; p.x += p.vx; p.y += p.vy; p.vx *= .992; p.r += p.vr; g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.globalAlpha = Math.max(0, 1 - age / 3200); g.fillStyle = p.col; g.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * .6); g.restore(); });
+    if (age < 3200) requestAnimationFrame(frame); else c.remove();
+  })(t0);
+}
+function celebrateTop() {
+  if (!D || !D.nights.length) return;
+  const top = standingsFor('all')[0]; if (!top || top.net <= 0) return;
+  const key = 'ph_top_' + D.lobby.id; let prev = null; try { prev = localStorage.getItem(key); localStorage.setItem(key, top.id); } catch {}
+  if (top.id === D.user.id && prev !== D.user.id) setTimeout(() => { confetti(170); toast("👑 You're #1 on the leaderboard!"); }, 700);
+}
+
+// ---------- night recap: a card to look at, share and save ----------
+function recapText(n) {
+  const sorted = [...n.entries].sort((a, b) => b.net - a.net), win = sorted[0];
+  return `🃏 ${D.lobby.name} · ${fmtDate(n.date)}${n.note ? ' (' + n.note + ')' : ''}\n${win && win.net > 0 ? `🏆 Winner: ${win.name} ${signedText(win.net)}\n` : ''}\n${sorted.map((e, i) => `${i + 1}. ${e.name}  ${signedText(e.net)}`).join('\n')}\n\nPot ${money(n.pot)} · ${n.entries.length} players\n${location.origin}`;
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function recapCanvas(n) {
+  const sorted = [...n.entries].sort((a, b) => b.net - a.net), W = 1080, rowH = 104, H = Math.max(1350, 700 + sorted.length * rowH + 190);
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const FONT = '-apple-system, "Segoe UI", system-ui, Roboto, sans-serif', GOLD = '#f2c14e', WIN = '#4ade80', LOSS = '#f87171', MUTE = '#8fa89a';
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0f1a14'); bg.addColorStop(1, '#17301f'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(242,193,78,.07)'; g.font = `bold 520px ${FONT}`; g.fillText('♠', W - 470, 560);
+  g.strokeStyle = '#2f5442'; g.lineWidth = 3; rr(g, 40, 40, W - 80, H - 80, 36); g.stroke();
+  g.fillStyle = GOLD; g.font = `bold 46px ${FONT}`; g.fillText('♠ Poker Hissab', 96, 142);
+  g.fillStyle = MUTE; g.font = `600 28px ${FONT}`; g.fillText((D.lobby.name || '').toUpperCase().slice(0, 34) + '  ·  NIGHT RECAP', 96, 198);
+  g.fillStyle = '#e8f1ec'; g.font = `bold 74px ${FONT}`; g.fillText(fmtDate(n.date), 96, 300);
+  if (n.note) { g.fillStyle = MUTE; g.font = `32px ${FONT}`; g.fillText(n.note.slice(0, 50), 96, 352); }
+  const win = sorted[0];
+  if (win && win.net > 0) {
+    g.fillStyle = 'rgba(242,193,78,.13)'; rr(g, 96, 400, W - 192, 190, 28); g.fill(); g.strokeStyle = '#6b5513'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = GOLD; g.font = `bold 28px ${FONT}`; g.fillText('🏆  WINNER OF THE NIGHT', 134, 458);
+    g.fillStyle = '#ffffff'; g.font = `bold 72px ${FONT}`; g.fillText(win.name.slice(0, 16), 134, 546);
+    g.fillStyle = WIN; g.font = `bold 72px ${FONT}`; g.textAlign = 'right'; g.fillText(signedText(win.net), W - 134, 546); g.textAlign = 'left';
+  }
+  const max = Math.max(1, ...sorted.map(e => Math.abs(e.net))); let y = 690;
+  sorted.forEach((e, i) => {
+    g.fillStyle = MUTE; g.font = `bold 38px ${FONT}`; g.fillText(String(i + 1), 100, y + 40);
+    g.fillStyle = '#e8f1ec'; g.font = `600 42px ${FONT}`; g.fillText(e.name.slice(0, 18), 160, y + 40);
+    g.fillStyle = e.net >= 0 ? WIN : LOSS; g.font = `bold 44px ${FONT}`; g.textAlign = 'right'; g.fillText(signedText(e.net), W - 100, y + 40); g.textAlign = 'left';
+    g.fillStyle = 'rgba(255,255,255,.07)'; rr(g, 160, y + 58, W - 320, 12, 6); g.fill();
+    g.fillStyle = e.net >= 0 ? WIN : LOSS; rr(g, 160, y + 58, Math.max(12, (W - 320) * Math.abs(e.net) / max), 12, 6); g.fill();
+    y += rowH;
+  });
+  g.fillStyle = MUTE; g.font = `30px ${FONT}`; g.fillText(`Pot ${money(n.pot)}  ·  ${n.entries.length} players`, 100, H - 120);
+  g.textAlign = 'right'; g.fillText(location.host, W - 100, H - 120); g.textAlign = 'left';
+  return c;
+}
+async function shareRecapImage(n) {
+  const blob = await new Promise(r => recapCanvas(n).toBlob(r, 'image/png')), name = `poker-recap-${n.date}.png`;
+  const file = new File([blob], name, { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: `${D.lobby.name} recap` }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); toast('Recap image saved ✓');
+}
+function openRecap(id, celebrate) {
+  const n = D.nights.find(x => x.id === id); if (!n) return toast('Recap not found', 'err');
+  const sorted = [...n.entries].sort((a, b) => b.net - a.net), win = sorted[0], max = Math.max(1, ...sorted.map(e => Math.abs(e.net)));
+  document.getElementById('recap')?.remove();
+  const m = document.createElement('div'); m.id = 'recap'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+  m.innerHTML = `<div class="modal-card" style="max-width:470px"><button class="modal-x" id="rx" aria-label="Close">✕</button>
+    <div class="recap"><div class="mute" style="font-size:12px;letter-spacing:1px">NIGHT RECAP · ${esc(D.lobby.name).toUpperCase()}</div>
+      <h2 style="font-size:26px;margin:4px 0 0">${fmtDate(n.date)}</h2>${n.note ? `<div class="mute">${esc(n.note)}</div>` : ''}
+      ${win && win.net > 0 ? `<div class="winner">🏆 <b>${esc(win.name)}</b> <span class="win" style="margin-left:auto;font-weight:800">${signedText(win.net)}</span></div>` : ''}
+      <div class="grid" style="grid-template-columns:repeat(3,1fr);margin:10px 0"><div class="stat"><small>Pot</small><b style="font-size:18px">${money(n.pot)}</b></div><div class="stat"><small>Players</small><b style="font-size:18px">${n.entries.length}</b></div><div class="stat"><small>Biggest swing</small><b style="font-size:18px">${money(Math.max(...sorted.map(e => Math.abs(e.net))))}</b></div></div>
+      ${sorted.map((e, i) => `<div class="rrow"><span class="rk">${i + 1}</span><div>${esc(e.name)}${e.userId === D.user.id ? ' <span class="mute">(you)</span>' : ''}<div class="bar"><i style="width:${Math.max(4, 100 * Math.abs(e.net) / max)}%;background:${e.net >= 0 ? 'var(--win)' : 'var(--loss)'}"></i></div></div><b class="amt ${e.net > 0 ? 'win' : e.net < 0 ? 'loss' : 'mute'}">${signedText(e.net)}</b></div>`).join('')}</div>
+    <div class="dlg-actions" style="justify-content:flex-start"><button id="rwa">💬 WhatsApp</button><button class="ghost" id="rimg">🖼 Share image</button></div></div>`;
+  document.body.appendChild(m); document.body.classList.add('modal-open');
+  const close = () => { document.removeEventListener('keydown', keys); m.remove(); if (!document.querySelector('.modal')) document.body.classList.remove('modal-open'); };
+  const keys = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', keys); m.addEventListener('mousedown', e => { if (e.target === m) close(); });
+  m.querySelector('#rx').onclick = close; m.querySelector('#rwa').onclick = () => waOpen(recapText(n)); m.querySelector('#rimg').onclick = () => shareRecapImage(n);
+  if (celebrate || (win && win.userId === D.user.id && win.net > 0)) setTimeout(() => confetti(win && win.userId === D.user.id ? 180 : 110), 250);
+}
+
+// ---------- live updates: a tiny "did anything change?" check, fast while a game is live ----------
+let lastRev = null, liveNow = false, pollT = null;
+const schedulePoll = () => { clearTimeout(pollT); pollT = setTimeout(pollTick, liveNow ? 4000 : 30000); };
+async function pollTick() {
+  if (!token || !me || document.hidden) return schedulePoll();
+  try { const p = await api('GET', '/api/pulse'); liveNow = p.live; if (lastRev !== null && p.rev !== lastRev) await onRemoteChange(); lastRev = p.rev; } catch {}
+  schedulePoll();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearTimeout(pollT); pollTick(); } });
+async function onRemoteChange() {
   const a = document.activeElement;
-  if (box.contains(a) && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) return;
-  if (box.querySelector('[id^="settle-"] table')) return;
-  try {
-    const nd = await api('GET', '/api/home');
-    const sig = x => JSON.stringify(x.events);
-    if (sig(nd) === sig(D)) return;
-    const hadLive = D.events.some(e => e.status === 'live'), hasLive = nd.events.some(e => e.status === 'live');
-    D = nd;
-    if (hadLive && !hasLive) return dashboard();
-    box.innerHTML = eventsHTML();
-  } catch {}
-}, 15000);
+  if (document.querySelector('.modal') || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) || document.querySelector('[id^="settle-"] table') || currentPage() === 'manage') return;
+  const prev = D, nd = await api('GET', '/api/home');
+  if (JSON.stringify(nd) === JSON.stringify(prev)) return;
+  D = nd;
+  const hadLive = prev.events.some(e => e.status === 'live'), hasLive = nd.events.some(e => e.status === 'live');
+  const known = new Set(prev.nights.map(n => n.id)), fresh = nd.nights.find(n => !known.has(n.id));
+  renderPage();
+  if (hadLive && !hasLive && fresh) {
+    const mine = fresh.entries.find(e => e.userId === D.user.id);
+    if (mine && mine.net > 0) confetti(150);
+    toast(mine ? `The session ended. You ${mine.net > 0 ? 'won' : mine.net < 0 ? 'lost' : 'broke even'}${mine.net ? ' ' + money(Math.abs(mine.net)) : ''}.` : 'The session ended.', 'ok', { label: 'View recap', fn: () => openRecap(fresh.id) });
+  }
+}
+schedulePoll();
 
 route();
 </script>

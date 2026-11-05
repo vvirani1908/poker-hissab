@@ -13,16 +13,16 @@ const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL, REDIS_TOKEN = process.env.
 if (REDIS_URL) {
   const redis = cmd => fetch(REDIS_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + REDIS_TOKEN }, body: JSON.stringify(cmd) }).then(r => r.json());
   setStorage({
-    async load() { const r = await redis(['GET', 'pokerdb']); if (r.error) throw new Error('Redis: ' + r.error); return r.result ? JSON.parse(r.result) : null; },
-    async save(db) { const r = await redis(['SET', 'pokerdb', JSON.stringify(db)]); if (r.error) throw new Error('Redis: ' + r.error); },
+    async load() { const r = await redis(['GET', 'pokerdb']); if (r.error) throw new Error('Redis: ' + r.error); return { db: r.result ? JSON.parse(r.result) : null, version: null }; },
+    async save(db) { const r = await redis(['SET', 'pokerdb', JSON.stringify(db)]); if (r.error) throw new Error('Redis: ' + r.error); return true; },
   });
   console.log('Storage: Upstash Redis');
 } else {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const file = path.join(DATA_DIR, 'data.json');
   setStorage({
-    async load() { return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null; },
-    async save(db) { fs.writeFileSync(file, JSON.stringify(db, null, 2)); },
+    async load() { return { db: fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null, version: null }; },
+    async save(db) { fs.writeFileSync(file, JSON.stringify(db, null, 2)); return true; },
   });
   console.log('Storage:', file);
 }

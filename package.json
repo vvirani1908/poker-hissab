@@ -4,5 +4,5 @@
   "private": true,
   "engines": { "node": ">=18" },
   "scripts": { "start": "node server.js" },
-  "dependencies": { "@netlify/blobs": "^8.1.0" }
+  "dependencies": { "@netlify/blobs": "^10.0.0" }
 }

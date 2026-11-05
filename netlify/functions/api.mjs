@@ -1,12 +1,20 @@
 // Netlify Function: serves /api/* using the shared core, storing data in Netlify Blobs.
+// Saves are conditional on the version (ETag) that was read, so simultaneous requests can't overwrite each other.
 import { createRequire } from 'node:module';
 import { getStore } from '@netlify/blobs';
 const require = createRequire(import.meta.url);
 const { handle, setStorage } = require('../../core.js');
 
+const store = () => getStore({ name: 'poker', consistency: 'strong' });
 setStorage({
-  async load() { return getStore({ name: 'poker', consistency: 'strong' }).get('db', { type: 'json' }); },
-  async save(db) { await getStore({ name: 'poker', consistency: 'strong' }).setJSON('db', db); },
+  async load() {
+    const r = await store().getWithMetadata('db', { type: 'json' });
+    return r ? { db: r.data, version: r.etag } : { db: null, version: null };
+  },
+  async save(db, version) {
+    const r = await store().setJSON('db', db, version ? { onlyIfMatch: version } : { onlyIfNew: true });
+    return r.modified;
+  },
 });
 
 export default async (req) => {

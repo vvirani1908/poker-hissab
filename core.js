@@ -2,7 +2,7 @@
 const crypto = require('crypto');
 
 let db = { users: [], lobbies: [], sessions: [], tokens: {} };
-let storage = null, loaded = false, dirty = false;
+let storage = null, loaded = false, dirty = false, version = null;
 const setStorage = st => { storage = st; loaded = false; };
 const save = () => { dirty = true; };
 
@@ -175,6 +175,11 @@ route('GET', '/api/home', ({ user }) => {
     history,
   };
   const out = { user: pub(user), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
+  out.lobby.notes = l.notes || '';
+  out.nights = db.sessions.filter(x => x.lobbyId === l.id).sort((a, b) => a.date.localeCompare(b.date) || a.created - b.created).map(x => ({
+    id: x.id, date: x.date, note: x.note, pot: x.entries.reduce((a, e) => a + e.buyIn, 0),
+    entries: x.entries.map(e => ({ userId: e.userId, name: (db.users.find(u => u.id === e.userId) || {}).name || 'Removed player', buyIn: e.buyIn, cashOut: e.cashOut, net: round2(e.cashOut - e.buyIn) })),
+  }));
   out.highlights = highlights(l);
   out.owe = oweView(l);
   out.events = eventsList().filter(e => e.status === 'upcoming' || e.status === 'live')
@@ -243,13 +248,13 @@ function evView(e, userId) {
   const players = e.players.map(p => {
     const u = db.users.find(x => x.id === p.userId);
     const rb = p.rebuys || [];
-    return { userId: p.userId, name: u ? u.name : 'Removed player', buyIn: p.buyIn, ...playerTotals(p), joinedAt: p.joinedAt, lastRebuy: rb.length ? rb[rb.length - 1].amount : 0 };
+    return { userId: p.userId, name: u ? u.name : 'Removed player', buyIn: p.buyIn, ...playerTotals(p), joinedAt: p.joinedAt, lastRebuy: rb.length ? rb[rb.length - 1].amount : 0, cashOut: p.cashOut === undefined ? null : p.cashOut };
   });
   const nm = id => (db.users.find(x => x.id === id) || {}).name || 'Removed player';
   const log = (e.log || []).slice(-15).reverse().map(l => ({ at: l.at, type: l.type, amount: l.amount, who: nm(l.userId), by: l.by && l.by !== l.userId ? nm(l.by) : null }));
   return {
     id: e.id, title: e.title, date: e.date, time: e.time, location: e.location, minBuyIn: e.minBuyIn, maxSeats: e.maxSeats,
-    status: e.status, startedAt: e.startedAt, players, pot: players.reduce((a, p) => a + p.total, 0),
+    status: e.status, startedAt: e.startedAt, players, pot: players.reduce((a, p) => a + p.total, 0), onTable: players.reduce((a, p) => a + p.total, 0) - players.reduce((a, p) => a + (p.cashOut || 0), 0),
     seatsLeft: e.maxSeats ? Math.max(0, e.maxSeats - players.length) : null,
     joined: players.some(p => p.userId === userId), log,
   };
@@ -338,6 +343,7 @@ route('POST', '/api/events/:id/rebuy', ({ user, params, body }) => {
   const e = findEvent(params.id);
   if (e.status !== 'live') throw new HttpError(400, 'Rebuys open once the session is live');
   const p = entryTarget(user, e, body);
+  if (p.cashOut !== undefined && p.cashOut !== null) throw new HttpError(400, 'Undo the cash-out first');
   const amount = posNum(body.amount);
   (p.rebuys = p.rebuys || []).push({ amount, at: Date.now() }); addLog(e, 'rebuy', p.userId, user.id, amount); save();
   return evView(e, user.id);
@@ -347,6 +353,7 @@ route('DELETE', '/api/events/:id/rebuy/last', ({ user, params, body }) => {
   const e = findEvent(params.id);
   if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
   const p = entryTarget(user, e, body);
+  if (p.cashOut !== undefined && p.cashOut !== null) throw new HttpError(400, 'Undo the cash-out first');
   if (!(p.rebuys || []).length) throw new HttpError(400, 'No rebuy to undo');
   const last = p.rebuys.pop(); addLog(e, 'undo', p.userId, user.id, last.amount); save();
   return evView(e, user.id);
@@ -356,6 +363,7 @@ route('PUT', '/api/events/:id/entry', ({ user, params, body }) => {
   const e = findEvent(params.id);
   if (e.status !== 'upcoming' && e.status !== 'live') throw new HttpError(400, 'This event is closed');
   const p = entryTarget(user, e, body);
+  if (p.cashOut !== undefined && p.cashOut !== null) throw new HttpError(400, 'Undo the cash-out first');
   const buyIn = posNum(body.buyIn);
   if (buyIn < e.minBuyIn) throw new HttpError(400, `Minimum buy-in is ${money(e.minBuyIn)}`);
   const old = p.buyIn; p.buyIn = buyIn; addLog(e, 'edit', p.userId, user.id, buyIn); save();
@@ -368,7 +376,7 @@ route('POST', '/api/events/:id/finish', ({ user, params, body }) => {
   const e = findEvent(params.id);
   if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
   const outs = body.cashOuts || {};
-  const entries = e.players.map(p => ({ userId: p.userId, buyIn: playerTotals(p).total, cashOut: num(outs[p.userId] || 0) }));
+  const entries = e.players.map(p => { const given = outs[p.userId]; const v = (given !== undefined && given !== '' && given !== null) ? given : (p.cashOut || 0); return { userId: p.userId, buyIn: playerTotals(p).total, cashOut: num(v) }; });
   const s = { id: uid(), lobbyId: l.id, created: Date.now(), date: e.date, note: e.title, entries: cleanEntries(l, entries) };
   db.sessions.push(s);
   e.status = 'finished'; e.sessionId = s.id; e.finishedAt = Date.now(); save();
@@ -426,40 +434,120 @@ route('DELETE', '/api/payments/:id', ({ user, params }) => {
   return { ok: true };
 }, 'any');
 
+
+// ---------- passwords: change, super-user reset, recovery code ----------
+const revokeTokens = (userId, keep) => { for (const t of Object.keys(db.tokens)) if (db.tokens[t] === userId && t !== keep) delete db.tokens[t]; };
+const checkNewPassword = pw => { if (String(pw || '').length < 4) throw new HttpError(400, 'Password must be at least 4 characters'); return String(pw); };
+
+route('POST', '/api/me/password', ({ user, token, body }) => {
+  if (!checkPw(user, String(body.current || ''))) throw new HttpError(400, 'Your current password is wrong');
+  Object.assign(user, hashPw(checkNewPassword(body.password)));
+  revokeTokens(user.id, token); save();
+  return { ok: true };
+}, 'any');
+
+route('POST', '/api/users/:id/password', ({ user, params, body }) => {
+  const l = needSuper(user);
+  if (!l.members.includes(params.id)) throw new HttpError(404, 'Player not found');
+  const target = db.users.find(u => u.id === params.id);
+  if (!target) throw new HttpError(404, 'Player not found');
+  Object.assign(target, hashPw(checkNewPassword(body.password)));
+  revokeTokens(target.id, null); save();
+  return { ok: true };
+}, 'any');
+
+// Emergency way back in (also for the super user): works only if RECOVERY_CODE is set on the server.
+const recoverFails = []; // timestamps of recent failures on this server instance
+route('POST', '/api/recover', async ({ body }) => {
+  const code = process.env.RECOVERY_CODE;
+  if (!code) throw new HttpError(403, 'Recovery is not set up on this server. Ask your host to reset your password.');
+  const now = Date.now();
+  while (recoverFails.length && now - recoverFails[0] > 10 * 60 * 1000) recoverFails.shift();
+  if (recoverFails.length >= 5) throw new HttpError(429, 'Too many attempts. Try again in a few minutes.');
+  const a = Buffer.from(String(body.code || '')), b = Buffer.from(code);
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+  const target = db.users.find(u => u.username === String(body.username || '').trim().toLowerCase());
+  if (!ok || !target) { recoverFails.push(now); await new Promise(r => setTimeout(r, 500)); throw new HttpError(400, 'Wrong username or recovery code'); }
+  Object.assign(target, hashPw(checkNewPassword(body.password)));
+  revokeTokens(target.id, null); save();
+  return { ok: true };
+});
+
+// ---------- house rules / notes ----------
+route('PUT', '/api/lobby/notes', ({ user, body }) => {
+  const l = needSuper(user);
+  l.notes = String(body.notes || '').slice(0, 2000); save();
+  return { ok: true };
+}, 'any');
+
+// ---------- live cash-out (leave the table early) ----------
+route('POST', '/api/events/:id/cashout', ({ user, params, body }) => {
+  const e = findEvent(params.id);
+  if (e.status !== 'live') throw new HttpError(400, 'Cash-outs happen during a live session');
+  const p = entryTarget(user, e, body);
+  const amount = num(body.amount);
+  const pot = e.players.reduce((a, x) => a + playerTotals(x).total, 0);
+  const others = e.players.filter(x => x !== p).reduce((a, x) => a + (x.cashOut || 0), 0);
+  if (amount > pot - others + 0.001) throw new HttpError(400, `There's only ${money(Math.max(0, pot - others))} left on the table`);
+  p.cashOut = round2(amount); addLog(e, 'cashout', p.userId, user.id, p.cashOut); save();
+  return evView(e, user.id);
+}, 'any');
+route('DELETE', '/api/events/:id/cashout', ({ user, params, body }) => {
+  const e = findEvent(params.id);
+  if (e.status !== 'live') throw new HttpError(400, 'Session is not live');
+  const p = entryTarget(user, e, body);
+  if (p.cashOut === undefined || p.cashOut === null) throw new HttpError(400, 'No cash-out to undo');
+  const was = p.cashOut; p.cashOut = null; addLog(e, 'uncash', p.userId, user.id, was); save();
+  return evView(e, user.id);
+}, 'any');
+
+// ---------- lightweight change counter so pages can refresh only when something changed ----------
+route('GET', '/api/pulse', () => ({ rev: db.rev || 0, live: eventsList().some(e => e.status === 'live') }));
+
 // ---------- request handling ----------
 // reload=true re-reads the database on every request (needed on serverless, where instances don't share memory).
 async function handle({ method, pathname, authorization, rawBody, reload }) {
-  try {
-    if (!loaded || reload) {
-      db = (await storage.load()) || { users: [], lobbies: [], sessions: [], tokens: {} };
-      db.tokens = db.tokens || {};
-      loaded = true;
-    }
-    let body = {};
-    if (rawBody) { try { body = JSON.parse(rawBody); } catch { throw new HttpError(400, 'Bad JSON'); } }
-    for (const r of routes) {
-      if (r.method !== method) continue;
-      const m = r.re.exec(pathname);
-      if (!m) continue;
-      const params = {};
-      r.keys.forEach((k, i) => params[k] = decodeURIComponent(m[i + 1]));
-      const token = (authorization || '').replace('Bearer ', '');
-      let user = null;
-      if (r.role) {
-        user = db.users.find(u => u.id === db.tokens[token]);
-        if (!user) throw new HttpError(401, 'Please log in');
+  // On shared storage another instance may save first. Saves are conditional on the version we read,
+  // so a clash is detected, we re-read the latest data, re-run the request, and try again.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, Math.random() * 25 * attempt)); // random backoff so racing requests spread out
+    try {
+      if (!loaded || reload || attempt > 0) {
+        const r = await storage.load();
+        db = r.db || { users: [], lobbies: [], sessions: [], tokens: {} };
+        db.tokens = db.tokens || {}; version = r.version; loaded = true;
       }
-      const out = r.handler({ user, params, body, token });
-      if (dirty) { dirty = false; await storage.save(db); }
-      return { status: 200, body: out };
+      let body = {};
+      if (rawBody) { try { body = JSON.parse(rawBody); } catch { throw new HttpError(400, 'Bad JSON'); } }
+      for (const r of routes) {
+        if (r.method !== method) continue;
+        const m = r.re.exec(pathname);
+        if (!m) continue;
+        const params = {};
+        r.keys.forEach((k, i) => params[k] = decodeURIComponent(m[i + 1]));
+        const token = (authorization || '').replace('Bearer ', '');
+        let user = null;
+        if (r.role) {
+          user = db.users.find(u => u.id === db.tokens[token]);
+          if (!user) throw new HttpError(401, 'Please log in');
+        }
+        const out = await r.handler({ user, params, body, token });
+        if (dirty) {
+          dirty = false; db.rev = (db.rev || 0) + 1;
+          if (!(await storage.save(db, version))) { loaded = false; throw new Conflict(); }
+        }
+        return { status: 200, body: out };
+      }
+      throw new HttpError(404, 'Not found');
+    } catch (e) {
+      dirty = false;
+      if (e instanceof Conflict) continue;
+      if (!(e instanceof HttpError)) { console.error(e); loaded = false; }
+      return { status: e.status || 500, body: { error: e.status ? e.message : 'Server error' } };
     }
-    throw new HttpError(404, 'Not found');
-  } catch (e) {
-    dirty = false;
-    if (!(e instanceof HttpError)) console.error(e);
-    if (!(e instanceof HttpError)) loaded = false; // re-read from storage after an unexpected failure
-    return { status: e.status || 500, body: { error: e.status ? e.message : 'Server error' } };
   }
+  return { status: 503, body: { error: 'Busy right now, please try again' } };
 }
+class Conflict extends Error {}
 
 module.exports = { handle, setStorage };
