@@ -34,7 +34,7 @@ http.createServer((req, res) => {
   if (!url.pathname.startsWith('/api/')) {
     let f = path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname);
     if (!f.startsWith(PUBLIC) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(PUBLIC, 'index.html');
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     return fs.createReadStream(f).pipe(res);
   }
   let raw = '';

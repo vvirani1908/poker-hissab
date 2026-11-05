@@ -253,17 +253,21 @@ function evView(e, userId) {
 
 route('POST', '/api/events', ({ user, body }) => {
   needSuper(user);
+  const title = String(body.title || '').trim().slice(0, 60);
+  if (!title) throw new HttpError(400, 'Give the event a title');
   const date = String(body.date || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError(400, 'Pick a date for the event');
+  const yesterday = new Date(Date.now() - 864e5).toISOString().slice(0, 10); // loose check, allows for time zones
+  if (date < yesterday) throw new HttpError(400, 'The date can\'t be in the past');
   const time = String(body.time || '');
-  if (time && !/^\d{2}:\d{2}$/.test(time)) throw new HttpError(400, 'Bad time');
+  if (!/^\d{2}:\d{2}$/.test(time)) throw new HttpError(400, 'Pick a start time');
+  const location = String(body.location || '').trim().slice(0, 100);
+  if (!location) throw new HttpError(400, 'Add a location');
+  if (body.minBuyIn === undefined || body.minBuyIn === null || String(body.minBuyIn).trim() === '') throw new HttpError(400, 'Set a minimum buy-in');
+  const minBuyIn = posNum(body.minBuyIn);
   const maxSeats = body.maxSeats ? Math.floor(Number(body.maxSeats)) : 0;
   if (body.maxSeats && (!isFinite(maxSeats) || maxSeats < 2)) throw new HttpError(400, 'Seats must be 2 or more');
-  const e = {
-    id: uid(), title: String(body.title || '').trim().slice(0, 60) || 'Poker Night', date, time,
-    location: String(body.location || '').trim().slice(0, 100), minBuyIn: num(body.minBuyIn || 0), maxSeats,
-    status: 'upcoming', players: [], created: Date.now(),
-  };
+  const e = { id: uid(), title, date, time, location, minBuyIn, maxSeats, status: 'upcoming', players: [], created: Date.now() };
   eventsList().push(e); save();
   return evView(e, user.id);
 }, 'any');

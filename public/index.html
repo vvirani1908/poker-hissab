@@ -331,9 +331,13 @@ function managePage() {
       <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div></div>
 
     <div class="card"><h2>Schedule an event</h2>
-      <div class="row"><input id="etitle" placeholder="Title (e.g. Friday Night Game)"><input id="eloc" placeholder="Location"></div>
-      <div class="row" style="margin-top:8px"><input type="date" id="edate" value="${new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)}"><input type="time" id="etime" value="20:00">
-        <input type="number" id="emin" min="0" step="any" placeholder="Min buy-in ($)"><input type="number" id="eseats" min="2" placeholder="Max seats (optional)"></div>
+      <div class="mute" style="font-size:13px;margin:-6px 0 12px">Fill in everything marked * to create the event.</div>
+      <div class="row"><input id="etitle" placeholder="Title * (e.g. Friday Night Game)"><input id="eloc" placeholder="Location *"></div>
+      <div class="row" style="margin-top:8px">
+        <label class="mute" style="flex:1;min-width:140px;font-size:12px">Date *<input type="date" id="edate" min="${new Date().toISOString().slice(0, 10)}"></label>
+        <label class="mute" style="flex:1;min-width:120px;font-size:12px">Start time *<input type="time" id="etime"></label>
+        <label class="mute" style="flex:1;min-width:140px;font-size:12px">Min buy-in ($) *<input type="number" id="emin" min="1" step="any" placeholder="e.g. 100"></label>
+        <label class="mute" style="flex:1;min-width:140px;font-size:12px">Max seats<input type="number" id="eseats" min="2" placeholder="optional"></label></div>
       <div class="row" style="margin-top:10px"><button id="ecreate">Create event</button></div><p class="err" id="eerr"></p></div>
 
     <div class="card"><h2 id="formTitle">Record a poker night</h2><div id="sform"></div></div>
@@ -366,10 +370,13 @@ function managePage() {
     try { await api('POST', '/api/restore', JSON.parse(await f.text())); dashboard(); } catch (x) { $('#err3').textContent = x.message; }
   };
   $('#ecreate').onclick = async () => {
-    try {
-      await api('POST', '/api/events', { title: $('#etitle').value, location: $('#eloc').value, date: $('#edate').value, time: $('#etime').value, minBuyIn: $('#emin').value || 0, maxSeats: $('#eseats').value });
-      location.hash = '#/';
-    } catch (e) { $('#eerr').textContent = e.message; }
+    const f = { title: $('#etitle').value.trim(), location: $('#eloc').value.trim(), date: $('#edate').value, time: $('#etime').value, minBuyIn: $('#emin').value, maxSeats: $('#eseats').value };
+    const missing = [['title', 'etitle', 'a title'], ['location', 'eloc', 'a location'], ['date', 'edate', 'a date'], ['time', 'etime', 'a start time'], ['minBuyIn', 'emin', 'a minimum buy-in']];
+    ['etitle', 'eloc', 'edate', 'etime', 'emin'].forEach(id => $('#' + id).style.borderColor = '');
+    const bad = missing.filter(([k]) => !f[k] || (k === 'minBuyIn' && !(+f[k] > 0)));
+    if (bad.length) { bad.forEach(([, id]) => $('#' + id).style.borderColor = 'var(--loss)'); $('#eerr').textContent = 'Please add ' + bad.map(b => b[2]).join(', ') + '.'; $('#' + bad[0][1]).focus(); return; }
+    if (f.date < new Date().toISOString().slice(0, 10)) { $('#edate').style.borderColor = 'var(--loss)'; $('#eerr').textContent = 'The date can\'t be in the past.'; return; }
+    try { await api('POST', '/api/events', f); location.hash = '#/'; } catch (e) { $('#eerr').textContent = e.message; }
   };
   sessionForm(null);
 }
