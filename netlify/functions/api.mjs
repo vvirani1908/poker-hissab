@@ -2,8 +2,10 @@
 // Saves are conditional on the version (ETag) that was read, so simultaneous requests can't overwrite each other.
 import { createRequire } from 'node:module';
 import { getStore } from '@netlify/blobs';
+import nodemailer from 'nodemailer';
 const require = createRequire(import.meta.url);
-const { handle, setStorage } = require('../../core.js');
+const { handle, setStorage, setMailer } = require('../../core.js');
+setMailer(nodemailer);
 
 const store = () => getStore({ name: 'poker', consistency: 'strong' });
 setStorage({

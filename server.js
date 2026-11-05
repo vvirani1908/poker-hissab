@@ -3,7 +3,8 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { handle, setStorage } = require('./core');
+const { handle, setStorage, setMailer } = require('./core');
+try { setMailer(require('nodemailer')); } catch { /* optional: only needed for SMTP/Gmail sending */ }
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || __dirname; // on Render: the mounted disk, e.g. /data

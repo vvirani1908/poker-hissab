@@ -2,7 +2,14 @@
   "name": "poker-hissab",
   "version": "1.0.0",
   "private": true,
-  "engines": { "node": ">=18" },
-  "scripts": { "start": "node server.js" },
-  "dependencies": { "@netlify/blobs": "^10.0.0" }
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0",
+    "nodemailer": "^10.3.1"
+  }
 }

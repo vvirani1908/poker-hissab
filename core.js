@@ -129,7 +129,11 @@ const checkEmail = e => {
   if (DISPOSABLE.has(e.split('@')[1])) throw new HttpError(400, 'Please use a real email address, not a temporary one');
 };
 const DEV_OTP = () => process.env.DEV_SHOW_OTP === '1';           // local testing only: returns the code in the response
-const mailReady = () => !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+const brevoReady = () => !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+const smtpReady = () => !!(process.env.SMTP_USER && process.env.SMTP_PASS);   // e.g. a Gmail address + a Gmail "app password"
+const mailReady = () => brevoReady() || smtpReady();
+let mailer = null;                       // the nodemailer module, handed in by server.js / the Netlify function (so it gets bundled)
+const setMailer = m => { mailer = m; };
 const MAIL_PER_EMAIL_HOUR = 5, MAIL_PER_DAY = Number(process.env.MAIL_DAILY_CAP || 150);
 
 const hashOtp = (code, salt) => crypto.createHash('sha256').update(salt + code).digest('hex');
@@ -156,8 +160,18 @@ function mailAllowed(email) {
 }
 async function sendMail(to, subject, text) {
   const html = `<div style="font-family:system-ui,sans-serif;font-size:16px;color:#1d2a22">${text.split('\n').map(l => `<p style="margin:0 0 10px">${l.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`).join('')}<p style="color:#6b786f;font-size:13px">♠ Poker Hissab</p></div>`;
+  const fromName = process.env.MAIL_FROM_NAME || 'Poker Hissab';
+  if (smtpReady()) {
+    if (!mailer) throw new HttpError(503, 'Email is misconfigured on this server.');
+    const port = Number(process.env.SMTP_PORT || 465);
+    const tx = mailer.createTransport({ host: process.env.SMTP_HOST || 'smtp.gmail.com', port, secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === '1' : port === 465,
+      auth: { user: process.env.SMTP_USER, pass: String(process.env.SMTP_PASS).replace(/\s+/g, '') }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
+    try { await tx.sendMail({ from: `"${fromName}" <${process.env.MAIL_FROM || process.env.SMTP_USER}>`, to, subject, text, html }); }
+    catch (e) { console.error('smtp failed', e.code || '', String(e.message).slice(0, 200)); throw new HttpError(502, "We couldn't send the email. Try again in a minute."); }
+    return;
+  }
   const r = await fetch(process.env.BREVO_URL || 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ sender: { email: process.env.MAIL_FROM, name: process.env.MAIL_FROM_NAME || 'Poker Hissab' }, to: [{ email: to }], subject, textContent: text, htmlContent: html }) });
+    body: JSON.stringify({ sender: { email: process.env.MAIL_FROM, name: fromName }, to: [{ email: to }], subject, textContent: text, htmlContent: html }) });
   if (!r.ok) { console.error('mail failed', r.status, (await r.text()).slice(0, 200)); throw new HttpError(502, "We couldn't send the email. Try again in a minute."); }
 }
 const otpMail = (email, code, why) => async () => {
@@ -679,4 +693,4 @@ async function handle({ method, pathname, authorization, rawBody, reload }) {
 }
 class Conflict extends Error {}
 
-module.exports = { handle, setStorage };
+module.exports = { handle, setStorage, setMailer };
