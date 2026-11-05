@@ -30,7 +30,7 @@ const genCode = () => {
 
 // ---------- helpers ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-const pub = u => ({ id: u.id, username: u.username, name: u.name, role: u.role });
+const pub = u => ({ id: u.id, name: u.name, role: u.role });
 const num = v => { const n = Number(v); if (!isFinite(n) || n < 0) throw new HttpError(400, 'Amounts must be numbers >= 0'); return n; };
 
 function lobbyView(l) {
@@ -119,46 +119,168 @@ const newSession = (userId) => {
   db.tokens[token] = userId; save();
   return token;
 };
-const checkCreds = body => {
-  const username = String(body.username || '').trim().toLowerCase();
-  if (!/^[a-z0-9_.-]{3,20}$/.test(username)) throw new HttpError(400, 'Username: 3-20 chars, letters/numbers/_.-');
-  if (String(body.password || '').length < 4) throw new HttpError(400, 'Password must be at least 4 characters');
-  if (db.users.some(u => u.username === username)) throw new HttpError(409, 'Username taken');
-  return username;
-};
 
-route('GET', '/api/status', () => ({ hasLobby: !!theLobby(), lobbyName: theLobby() ? theLobby().name : null }));
+// ---------- email identity: one real inbox = one account ----------
+const DISPOSABLE = new Set(['mailinator.com', 'guerrillamail.com', 'guerrillamail.net', '10minutemail.com', 'tempmail.com', 'temp-mail.org', 'yopmail.com', 'trashmail.com', 'sharklasers.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com', 'fakeinbox.com', 'mintemail.com', 'emailondeck.com', 'moakt.com', 'tmpmail.org', 'mohmal.com', 'tempail.com', 'burnermail.io', 'spamgourmet.com']);
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
+const normEmail = e => String(e || '').trim().toLowerCase();
+const checkEmail = e => {
+  if (!EMAIL_RE.test(e) || e.length > 120) throw new HttpError(400, 'Enter a valid email address');
+  if (DISPOSABLE.has(e.split('@')[1])) throw new HttpError(400, 'Please use a real email address, not a temporary one');
+};
+const DEV_OTP = () => process.env.DEV_SHOW_OTP === '1';           // local testing only: returns the code in the response
+const mailReady = () => !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+const MAIL_PER_EMAIL_HOUR = 5, MAIL_PER_DAY = Number(process.env.MAIL_DAILY_CAP || 150);
+
+const hashOtp = (code, salt) => crypto.createHash('sha256').update(salt + code).digest('hex');
+function newOtp() {
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0'), salt = crypto.randomBytes(8).toString('hex');
+  return { code, rec: { salt, h: hashOtp(code, salt), exp: Date.now() + 10 * 60 * 1000, tries: 0, sentAt: Date.now() } };
+}
+// Returns null when the code is right, or an error marker (the failed try is saved, so guessing can't be reset).
+function checkOtp(rec, code) {
+  if (!rec || Date.now() > rec.exp) return failSaved(400, 'That code has expired. Request a new one.');
+  if (rec.tries >= 5) return failSaved(429, 'Too many wrong tries. Request a new code.');
+  rec.tries++; save();
+  const a = Buffer.from(hashOtp(String(code || '').trim(), rec.salt)), b = Buffer.from(rec.h);
+  return crypto.timingSafeEqual(a, b) ? null : failSaved(400, 'That code is wrong');
+}
+const failSaved = (status, msg) => ({ __err: true, status, msg });
+
+// Send limits: per email per hour, and a daily cap so the free mail plan can't be drained.
+function mailAllowed(email) {
+  const now = Date.now(); db.mailLog = (db.mailLog || []).filter(m => now - m.at < 24 * 3600 * 1000);
+  if (db.mailLog.length >= MAIL_PER_DAY) throw new HttpError(429, 'Too many sign-ups today. Please try again tomorrow.');
+  if (db.mailLog.filter(m => m.email === email && now - m.at < 3600 * 1000).length >= MAIL_PER_EMAIL_HOUR) throw new HttpError(429, 'Too many codes sent to this email. Try again in an hour.');
+  db.mailLog.push({ email, at: now });
+}
+async function sendMail(to, subject, text) {
+  const html = `<div style="font-family:system-ui,sans-serif;font-size:16px;color:#1d2a22">${text.split('\n').map(l => `<p style="margin:0 0 10px">${l.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))}</p>`).join('')}<p style="color:#6b786f;font-size:13px">♠ Poker Hissab</p></div>`;
+  const r = await fetch(process.env.BREVO_URL || 'https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ sender: { email: process.env.MAIL_FROM, name: process.env.MAIL_FROM_NAME || 'Poker Hissab' }, to: [{ email: to }], subject, textContent: text, htmlContent: html }) });
+  if (!r.ok) { console.error('mail failed', r.status, (await r.text()).slice(0, 200)); throw new HttpError(502, "We couldn't send the email. Try again in a minute."); }
+}
+const otpMail = (email, code, why) => async () => {
+  if (DEV_OTP() && !mailReady()) { console.log(`[dev] code for ${email}: ${code}`); return; }
+  await sendMail(email, `Your Poker Hissab code: ${code}`, `Your code is ${code}.\nUse it ${why}. It expires in 10 minutes.\nIf you didn't ask for this, you can ignore this email.`);
+};
+const needMailSetup = () => { if (!mailReady() && !DEV_OTP()) throw new HttpError(503, "Email sign-up isn't set up on this server yet. Ask your host."); };
+const cleanPending = () => { const now = Date.now(); db.pending = (db.pending || []).filter(p => now - p.created < 3600 * 1000); return db.pending; };
+const handleFor = email => { const base = (email.split('@')[0].toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 20)) || 'player'; let h = base, i = 2; while (db.users.some(u => u.username === h)) h = base + i++; return h; };
+const findByLogin = id => { const x = String(id || '').trim().toLowerCase(); return db.users.find(u => u.email === x || u.username === x); };
+
+route('GET', '/api/status', () => ({ hasLobby: !!theLobby(), lobbyName: theLobby() ? theLobby().name : null, emailReady: mailReady() || DEV_OTP() }));
 
 route('POST', '/api/login', ({ body }) => {
-  const u = db.users.find(x => x.username === String(body.username || '').toLowerCase());
-  if (!u || !checkPw(u, String(body.password || ''))) throw new HttpError(401, 'Wrong username or password');
+  const u = findByLogin(body.username || body.email);
+  if (!u || !checkPw(u, String(body.password || ''))) throw new HttpError(401, 'Wrong email or password');
   return { token: newSession(u.id), user: pub(u) };
 });
 
-// First account ever = super user (creates the one lobby). Everyone else needs the lobby code.
-route('POST', '/api/register', ({ body }) => {
+// Step 1: validate and email a 6-digit code. Nothing is created until the code is entered.
+route('POST', '/api/register/start', ({ body, after }) => {
+  needMailSetup();
+  const l = theLobby(), email = normEmail(body.email); checkEmail(email);
+  const name = String(body.name || '').trim().slice(0, 40); if (!name) throw new HttpError(400, 'Enter your name');
+  checkNewPassword(body.password);
+  if (db.users.some(u => u.email === email)) throw new HttpError(409, 'That email already has an account. Sign in instead.');
+  if (l && String(body.code || '').trim().toUpperCase() !== l.code) throw new HttpError(400, 'Invalid lobby code');
+  mailAllowed(email);
+  const list = cleanPending(); db.pending = list.filter(p => !(p.kind === 'register' && p.email === email));
+  const { code, rec } = newOtp();
+  const p = { id: uid(), kind: 'register', email, name, ...hashPw(String(body.password)), isFirst: !l, lobbyName: String(body.lobbyName || '').trim().slice(0, 60) || 'Poker Night', otp: rec, created: Date.now() };
+  db.pending.push(p); save(); after(otpMail(email, code, 'to finish creating your account'));
+  return { pendingId: p.id, email, ...(DEV_OTP() ? { devCode: code } : {}) };
+});
+
+// Step 2: the code is right -> create the account. Everyone except the very first person then waits for host approval.
+route('POST', '/api/register/verify', ({ body }) => {
+  const p = cleanPending().find(x => x.id === body.pendingId && x.kind === 'register');
+  if (!p) throw new HttpError(400, 'That sign-up expired. Please start again.');
+  const bad = checkOtp(p.otp, body.otp); if (bad) return bad;
+  if (db.users.some(u => u.email === p.email)) throw new HttpError(409, 'That email already has an account. Sign in instead.');
   const l = theLobby();
-  const username = checkCreds(body);
-  const display = String(body.name || '').trim() || username;
-  if (!l) {
-    const u = addUser(username, display, body.password, 'super');
-    db.lobbies.push({ id: uid(), name: String(body.lobbyName || '').trim() || 'Poker Night', code: genCode(), ownerId: u.id, members: [u.id] });
-    save();
-    return { token: newSession(u.id), user: pub(u) };
-  }
-  if (String(body.code || '').trim().toUpperCase() !== l.code) throw new HttpError(400, 'Invalid lobby code');
-  const u = addUser(username, display, body.password, 'player');
-  l.members.push(u.id);
-  save();
-  return { token: newSession(u.id), user: pub(u) };
+  if (p.isFirst && l) { db.pending = db.pending.filter(x => x !== p); save(); return failSaved(409, 'Someone else just set up the lobby. Ask them for the lobby code.'); }
+  const u = { id: uid(), username: handleFor(p.email), email: p.email, emailVerified: true, name: p.name, role: p.isFirst ? 'super' : 'player', salt: p.salt, hash: p.hash, created: Date.now() };
+  db.users.push(u);
+  if (p.isFirst) db.lobbies.push({ id: uid(), name: p.lobbyName, code: genCode(), ownerId: u.id, members: [u.id], pending: [] });
+  else (l.pending = l.pending || []).push(u.id);
+  db.pending = db.pending.filter(x => x !== p);
+  return { token: newSession(u.id), user: pub(u), waiting: !p.isFirst };
+});
+
+route('POST', '/api/otp/resend', ({ body, after }) => {
+  const p = cleanPending().find(x => x.id === body.pendingId);
+  if (!p) throw new HttpError(400, 'That request expired. Please start again.');
+  if (Date.now() - p.otp.sentAt < 30 * 1000) throw new HttpError(429, 'Please wait a few seconds before asking for another code.');
+  mailAllowed(p.email);
+  const { code, rec } = newOtp(); p.otp = rec; save();
+  after(otpMail(p.email, code, p.kind === 'reset' ? 'to reset your password' : p.kind === 'email' ? 'to confirm your email' : 'to finish creating your account'));
+  return { ok: true, ...(DEV_OTP() ? { devCode: code } : {}) };
+});
+
+// ---------- host approval for new members ----------
+route('POST', '/api/members/:id/approve', ({ user, params }) => {
+  const l = needSuper(user);
+  if (!(l.pending || []).includes(params.id)) throw new HttpError(404, 'No such request');
+  l.pending = l.pending.filter(x => x !== params.id); if (!l.members.includes(params.id)) l.members.push(params.id); save();
+  return { ok: true };
+}, 'any');
+route('POST', '/api/members/:id/decline', ({ user, params }) => {
+  const l = needSuper(user);
+  if (!(l.pending || []).includes(params.id)) throw new HttpError(404, 'No such request');
+  l.pending = l.pending.filter(x => x !== params.id); db.users = db.users.filter(u => u.id !== params.id); revokeTokens(params.id, null); save();
+  return { ok: true };
+}, 'any');
+
+// ---------- add / confirm an email on an older (username-only) account ----------
+route('POST', '/api/me/email/start', ({ user, body, after }) => {
+  needMailSetup();
+  const email = normEmail(body.email); checkEmail(email);
+  if (db.users.some(u => u.email === email && u.id !== user.id)) throw new HttpError(409, 'That email is already used by another account');
+  mailAllowed(email); cleanPending(); db.pending = db.pending.filter(p => !(p.kind === 'email' && p.userId === user.id));
+  const { code, rec } = newOtp(); const p = { id: uid(), kind: 'email', userId: user.id, email, otp: rec, created: Date.now() };
+  db.pending.push(p); save(); after(otpMail(email, code, 'to confirm your email'));
+  return { pendingId: p.id, email, ...(DEV_OTP() ? { devCode: code } : {}) };
+}, 'any');
+route('POST', '/api/me/email/verify', ({ user, body }) => {
+  const p = cleanPending().find(x => x.id === body.pendingId && x.kind === 'email' && x.userId === user.id);
+  if (!p) throw new HttpError(400, 'That request expired. Please start again.');
+  const bad = checkOtp(p.otp, body.otp); if (bad) return bad;
+  if (db.users.some(u => u.email === p.email && u.id !== user.id)) throw new HttpError(409, 'That email is already used by another account');
+  user.email = p.email; user.emailVerified = true; db.pending = db.pending.filter(x => x !== p); save();
+  return { ok: true };
+}, 'any');
+
+// ---------- forgot password by emailed code ----------
+route('POST', '/api/password/forgot', ({ body, after }) => {
+  needMailSetup();
+  const email = normEmail(body.email); checkEmail(email);
+  const u = db.users.find(x => x.email === email);
+  const fake = uid(); // same answer whether or not the email exists
+  if (!u) return { pendingId: fake, email };
+  mailAllowed(email); cleanPending(); db.pending = db.pending.filter(p => !(p.kind === 'reset' && p.userId === u.id));
+  const { code, rec } = newOtp(); const p = { id: uid(), kind: 'reset', userId: u.id, email, otp: rec, created: Date.now() };
+  db.pending.push(p); save(); after(otpMail(email, code, 'to reset your password'));
+  return { pendingId: p.id, email, ...(DEV_OTP() ? { devCode: code } : {}) };
+});
+route('POST', '/api/password/reset', ({ body }) => {
+  const p = cleanPending().find(x => x.id === body.pendingId && x.kind === 'reset');
+  if (!p) throw new HttpError(400, 'That code is wrong or expired. Request a new one.');
+  const bad = checkOtp(p.otp, body.otp); if (bad) return bad;
+  const u = db.users.find(x => x.id === p.userId); if (!u) throw new HttpError(400, 'Account not found');
+  Object.assign(u, hashPw(checkNewPassword(body.password)));
+  revokeTokens(u.id, null); db.pending = db.pending.filter(x => x !== p); save();
+  return { ok: true };
 });
 
 route('POST', '/api/logout', ({ token }) => { delete db.tokens[token]; save(); return { ok: true }; }, 'any');
-route('GET', '/api/me', ({ user }) => ({ user: pub(user) }), 'any');
+route('GET', '/api/me', ({ user }) => { const l = theLobby(); return { user: pub(user), pending: !!(l && (l.pending || []).includes(user.id)) }; }, 'any');
 
 // Everything the dashboard needs in one call
 route('GET', '/api/home', ({ user }) => {
   const l = theLobby();
+  if (l && (l.pending || []).includes(user.id)) throw new HttpError(403, 'PENDING');
   if (!l || !l.members.includes(user.id)) throw new HttpError(404, 'Not in the lobby');
   const v = lobbyView(l);
   const isSuper = l.ownerId === user.id;
@@ -174,7 +296,7 @@ route('GET', '/api/home', ({ user }) => {
     wins: nets.filter(n => n > 0).length,
     history,
   };
-  const out = { user: pub(user), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
+  const out = { user: { ...pub(user), hasEmail: !!user.email }, emailReady: mailReady() || DEV_OTP(), isSuper, lobby: { id: l.id, name: l.name, hostId: l.ownerId }, members: v.members, standings: v.standings, overall: v.overall, me };
   out.lobby.notes = l.notes || '';
   out.nights = db.sessions.filter(x => x.lobbyId === l.id).sort((a, b) => a.date.localeCompare(b.date) || a.created - b.created).map(x => ({
     id: x.id, date: x.date, note: x.note, pot: x.entries.reduce((a, e) => a + e.buyIn, 0),
@@ -185,7 +307,11 @@ route('GET', '/api/home', ({ user }) => {
   out.events = eventsList().filter(e => e.status === 'upcoming' || e.status === 'live')
     .sort((a, b) => (a.status === 'live' ? -1 : 0) - (b.status === 'live' ? -1 : 0) || (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))
     .map(e => evView(e, user.id));
-  if (isSuper) { out.lobby.code = l.code; out.sessions = v.sessions; }
+  if (isSuper) {
+    out.lobby.code = l.code; out.sessions = v.sessions;
+    out.contacts = Object.fromEntries(v.members.map(m => [m.id, (db.users.find(u => u.id === m.id) || {}).email || (db.users.find(u => u.id === m.id) || {}).username || '']));
+    out.pending = (l.pending || []).map(id => db.users.find(u => u.id === id)).filter(Boolean).map(u => ({ id: u.id, name: u.name, email: u.email || '', since: u.created || 0 }));
+  }
   return out;
 }, 'any');
 
@@ -466,7 +592,7 @@ route('POST', '/api/recover', async ({ body }) => {
   if (recoverFails.length >= 5) throw new HttpError(429, 'Too many attempts. Try again in a few minutes.');
   const a = Buffer.from(String(body.code || '')), b = Buffer.from(code);
   const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-  const target = db.users.find(u => u.username === String(body.username || '').trim().toLowerCase());
+  const target = findByLogin(body.username);
   if (!ok || !target) { recoverFails.push(now); await new Promise(r => setTimeout(r, 500)); throw new HttpError(400, 'Wrong username or recovery code'); }
   Object.assign(target, hashPw(checkNewPassword(body.password)));
   revokeTokens(target.id, null); save();
@@ -531,11 +657,14 @@ async function handle({ method, pathname, authorization, rawBody, reload }) {
           user = db.users.find(u => u.id === db.tokens[token]);
           if (!user) throw new HttpError(401, 'Please log in');
         }
-        const out = await r.handler({ user, params, body, token });
+        const afters = [], after = fn => afters.push(fn);
+        const out = await r.handler({ user, params, body, token, after });
         if (dirty) {
           dirty = false; db.rev = (db.rev || 0) + 1;
           if (!(await storage.save(db, version))) { loaded = false; throw new Conflict(); }
         }
+        for (const fn of afters) await fn();               // e.g. send the email, only once the data is safely saved
+        if (out && out.__err) return { status: out.status, body: { error: out.msg } };
         return { status: 200, body: out };
       }
       throw new HttpError(404, 'Not found');

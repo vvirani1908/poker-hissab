@@ -200,11 +200,14 @@ async function logout() { try { await api('POST', '/api/logout'); } catch {} log
 const setErr = m => { const e = $('#err'); if (e) e.textContent = m || ''; };
 
 const currentPage = () => { const h = location.hash; return h.startsWith('#/portfolio') ? 'portfolio' : (h.startsWith('#/manage') && me && me.role === 'super') ? 'manage' : 'home'; };
-function renderPage() {
-  const page = currentPage();
-  $('#nav').innerHTML = [['home', '#/', 'Home'], ['portfolio', '#/portfolio', 'My Portfolio'], ...(me.role === 'super' ? [['manage', '#/manage', 'Manage']] : [])]
+function renderNav() {
+  const page = currentPage(), n = (D && D.pending && D.pending.length) || 0;
+  $('#nav').innerHTML = [['home', '#/', 'Home'], ['portfolio', '#/portfolio', 'My Portfolio'], ...(me.role === 'super' ? [['manage', '#/manage', 'Manage' + (n ? ` <span class="pill" style="background:var(--loss);color:#fff;border-color:var(--loss)">${n}</span>` : '')]] : [])]
     .map(([k, href, label]) => `<a href="${href}" class="${k === page ? 'on' : ''}">${label}</a>`).join('');
-  return { home: homePage, portfolio: portfolioPage, manage: managePage }[page]();
+}
+function renderPage() {
+  renderNav();
+  return { home: homePage, portfolio: portfolioPage, manage: managePage }[currentPage()]();
 }
 async function route() {
   if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
@@ -212,7 +215,8 @@ async function route() {
   applyThemeBtn();
   if (!me) { $('#nav').innerHTML = ''; return loginView(); }
   document.body.classList.remove('landing'); document.getElementById('authModal')?.remove();
-  try { D = await api('GET', '/api/home'); } catch (e) { app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
+  clearInterval(pendTimer);
+  try { D = await api('GET', '/api/home'); } catch (e) { if (e.message === 'PENDING') return pendingView(); app.innerHTML = `<div class="card">${esc(e.message)}</div>`; return; }
   window.scrollTo(0, 0);
   renderPage(); celebrateTop();
 }
@@ -245,7 +249,7 @@ async function loginView(mode, openModal) {
     <section class="lp-section"><h2>Up and running in three steps</h2><p class="lead">No spreadsheets. No group-chat arguments.</p>
       <div class="steps">
         <div class="step"><b>Start a lobby</b><span>The first person to sign up becomes the host and gets a private lobby code.</span></div>
-        <div class="step"><b>Invite your table</b><span>Friends create an account with the code. Only people you invite can join.</span></div>
+        <div class="step"><b>Invite your table</b><span>Friends sign up with the code and confirm their email. You approve each person before they join.</span></div>
         <div class="step"><b>Play, record, settle</b><span>Log the night, and everyone's balance and who-owes-whom update automatically.</span></div></div></section>
 
     <section class="lp-section"><div class="lp-preview">
@@ -264,7 +268,7 @@ async function loginView(mode, openModal) {
         <div class="feat"><span class="ic">🏆</span><b>Leaderboard & podium</b><span>See who's running hot, with win rates and totals for the whole lobby.</span></div>
         <div class="feat"><span class="ic">💸</span><b>Who owes whom</b><span>The fewest payments to square everyone up, and mark them paid as they happen.</span></div>
         <div class="feat"><span class="ic">📅</span><b>Upcoming events</b><span>Schedule the next night with date, place and seats. Players tap to join.</span></div>
-        <div class="feat"><span class="ic">🔒</span><b>Private by design</b><span>Invite-only lobby. Hashed passwords, and the host can back up everything.</span></div></div></section>
+        <div class="feat"><span class="ic">🔒</span><b>Private by design</b><span>Invite-only, email-verified, and you approve every member. Hashed passwords, and backups are one click.</span></div></div></section>
 
     <footer class="lp-foot">♠ Poker Hissab · Play the cards, we'll keep the books.</footer>`;
   applyThemeBtn();
@@ -279,41 +283,88 @@ function openAuth(mode) {
   document.getElementById('authModal')?.remove();
   const reg = mode === 'register', lobby = LP.hasLobby ? esc(LP.lobbyName) : null;
   const title = reg ? (lobby ? `Join ${lobby}` : 'Start your lobby') : 'Welcome back';
-  const sub = reg ? (lobby ? 'Create your account with the lobby code your host shared.' : "You're first here, so you'll be the host.") : 'Sign in to see your portfolio and the next game.';
+  const sub = reg ? (lobby ? 'Create your account with the lobby code your host shared. We\'ll email you a code to confirm it\'s really you.' : "You're first here, so you'll be the host. We'll email you a code to confirm your email.") : 'Sign in with your email (or your username) and password.';
   const m = document.createElement('div');
   m.id = 'authModal'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
-  m.innerHTML = `<div class="modal-card">
-    <button class="modal-x" id="mx" aria-label="Close">✕</button>
-    <h2>${title}</h2><div class="sub">${sub}</div>
-    ${reg ? `<input id="name" placeholder="Your name" autocomplete="name">` : ''}
-    <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
-    <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
-    <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
-    ${reg ? (LP.hasLobby
-      ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">`
-      : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
-    <button style="width:100%;padding:12px" id="go">${reg ? (lobby ? 'Join the lobby' : 'Create lobby & account') : 'Sign in'}</button><p class="err" id="err"></p>
-    ${reg ? '' : '<p style="text-align:center;font-size:13px;margin:0 0 8px"><a href="#" id="forgot" style="color:var(--mute)">Forgot password?</a></p>'}
-    <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
-  </div>`;
+  const card = html => { m.innerHTML = `<div class="modal-card"><button class="modal-x" id="mx" aria-label="Close">✕</button>${html}</div>`; $('#mx').onclick = closeAuth; };
   document.body.appendChild(m); document.body.classList.add('modal-open');
   m.addEventListener('mousedown', e => { if (e.target === m) closeAuth(); });
   document.addEventListener('keydown', authKeys);
-  $('#mx').onclick = closeAuth;
-  if ($('#forgot')) $('#forgot').onclick = e => { e.preventDefault(); closeAuth(); openRecover(); };
-  $('#sw').onclick = e => { e.preventDefault(); openAuth(reg ? 'login' : 'register'); };
-  $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
-  const go = async () => {
-    try {
-      const body = { username: $('#user').value, password: $('#pw').value };
-      if (reg) { body.name = $('#name').value; if ($('#code')) body.code = $('#code').value; if ($('#lobbyName')) body.lobbyName = $('#lobbyName').value; }
-      const r = await api('POST', reg ? '/api/register' : '/api/login', body);
-      token = r.token; me = r.user; localStorage.setItem('token', token); closeAuth(); route();
-    } catch (e) { setErr(e.message); }
+
+  // ----- step 1: the form -----
+  const form = () => {
+    const paused = reg && !LP.emailReady;
+    card(`<h2>${title}</h2><div class="sub">${sub}</div>
+      ${paused ? '<div class="warn" style="margin:0 0 12px">New sign-ups are paused: the host hasn\'t finished setting up email yet. Please check back soon.</div>' : ''}
+      ${reg ? `<input id="name" placeholder="Your name" autocomplete="name">` : ''}
+      <input id="user" type="${reg ? 'email' : 'text'}" placeholder="${reg ? 'Email address' : 'Email (or username)'}" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="${reg ? 'email' : 'username'}" inputmode="email">
+      <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
+      <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
+      ${reg ? (LP.hasLobby ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">` : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
+      <button style="width:100%;padding:12px" id="go" ${paused ? 'disabled' : ''}>${reg ? 'Email me a code' : 'Sign in'}</button><p class="err" id="err"></p>
+      ${reg ? '' : '<p style="text-align:center;font-size:13px;margin:0 0 8px"><a href="#" id="forgot" style="color:var(--mute)">Forgot password?</a> &nbsp;·&nbsp; <a href="#" id="hostrec" style="color:var(--mute)">Host recovery code</a></p>'}
+      <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>`);
+    if ($('#forgot')) $('#forgot').onclick = e => { e.preventDefault(); closeAuth(); openForgot(); };
+    if ($('#hostrec')) $('#hostrec').onclick = e => { e.preventDefault(); closeAuth(); openRecover(); };
+    $('#sw').onclick = e => { e.preventDefault(); openAuth(reg ? 'login' : 'register'); };
+    $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
+    const go = async () => {
+      setErr('');
+      try {
+        if (!reg) {
+          const r = await api('POST', '/api/login', { username: $('#user').value, password: $('#pw').value });
+          token = r.token; me = r.user; localStorage.setItem('token', token); closeAuth(); route(); return;
+        }
+        const body = { email: $('#user').value, name: $('#name').value, password: $('#pw').value };
+        if ($('#code')) body.code = $('#code').value; if ($('#lobbyName')) body.lobbyName = $('#lobbyName').value;
+        const r = await api('POST', '/api/register/start', body);
+        codeStep(r);
+      } catch (e) { setErr(e.message); }
+    };
+    $('#go').onclick = go;
+    $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+    (reg ? $('#name') : $('#user')).focus();
   };
-  $('#go').onclick = go;
-  $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
-  (reg ? $('#name') : $('#user')).focus();
+
+  // ----- step 2 (sign-up): type the 6-digit code from the email -----
+  const codeStep = r => {
+    let pendingId = r.pendingId, wait = 30, timer = null;
+    card(`<h2>Check your email</h2><div class="sub">We sent a 6-digit code to <b style="color:var(--text)">${esc(r.email)}</b>. It expires in 10 minutes. Check your spam folder if it doesn't show up.</div>
+      ${r.devCode ? `<div class="warn" style="margin:0 0 12px">Test mode: your code is <b>${r.devCode}</b></div>` : ''}
+      <input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="font-size:22px;letter-spacing:8px;text-align:center">
+      <button style="width:100%;padding:12px" id="vf">Confirm &amp; create account</button><p class="err" id="err"></p>
+      <p class="mute" style="text-align:center;font-size:14px;margin:0"><button class="ghost sm" id="resend" disabled>Resend code (30)</button> &nbsp; <a href="#" id="back" style="color:var(--mute)">Wrong email?</a></p>`);
+    const tick = () => { const b = $('#resend'); if (!b) return clearInterval(timer); if (--wait > 0) b.textContent = `Resend code (${wait})`; else { b.textContent = 'Resend code'; b.disabled = false; clearInterval(timer); } };
+    timer = setInterval(tick, 1000);
+    $('#back').onclick = e => { e.preventDefault(); clearInterval(timer); form(); };
+    $('#resend').onclick = async () => {
+      try { const x = await api('POST', '/api/otp/resend', { pendingId }); toast('New code sent ✓'); wait = 30; $('#resend').disabled = true; $('#resend').textContent = 'Resend code (30)'; timer = setInterval(tick, 1000); if (x.devCode) $('#err').innerHTML = `<span class="mute">Test mode code: ${x.devCode}</span>`; } catch (e) { setErr(e.message); }
+    };
+    const verify = async () => {
+      try {
+        const v = await api('POST', '/api/register/verify', { pendingId, otp: $('#otp').value });
+        clearInterval(timer); token = v.token; me = v.user; localStorage.setItem('token', token); closeAuth();
+        if (v.waiting) toast('Email confirmed ✓ The host will approve you shortly.'); else toast('Welcome! Your lobby is ready 🎉');
+        route();
+      } catch (e) { setErr(e.message); }
+    };
+    $('#vf').onclick = verify;
+    $('#otp').oninput = e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); if (e.target.value.length === 6) verify(); };
+    $('#otp').onkeydown = e => { if (e.key === 'Enter') verify(); };
+    $('#otp').focus();
+  };
+  form();
+}
+
+// ---------- forgot password: email -> code -> new password ----------
+async function openForgot() {
+  const v = await openDialog({ title: 'Forgot your password?', text: 'Enter your account email and we\'ll send a 6-digit code. Older accounts without an email: ask your host to reset it.', fields: [{ id: 'e', label: 'Email', type: 'email' }], ok: 'Send code' });
+  if (!v) return openAuth('login');
+  let r; try { r = await api('POST', '/api/password/forgot', { email: v.e }); } catch (e) { toast(e.message, 'err'); return openAuth('login'); }
+  const w = await openDialog({ title: 'Enter the code', text: `If that email has an account, we sent a code to <b>${esc(v.e)}</b>.${r.devCode ? ` <span class="warn" style="display:inline-block;margin-top:6px">Test mode code: ${r.devCode}</span>` : ''}`, fields: [{ id: 'otp', label: '6-digit code' }, { id: 'pw', label: 'New password', type: 'password', help: 'At least 4 characters.' }], ok: 'Reset password' });
+  if (!w) return openAuth('login');
+  try { await api('POST', '/api/password/reset', { pendingId: r.pendingId, otp: w.otp, password: w.pw }); toast('Password reset ✓ Sign in with your new password.'); } catch (e) { toast(e.message, 'err'); }
+  openAuth('login');
 }
 
 // ---------- chart: cumulative profit/loss by night ----------
@@ -435,6 +486,7 @@ function homePage() {
   const st = standingsFor(LB);
   const recentNights = [...D.nights].reverse().slice(0, 5).map(n => ({ ...n, top: [...n.entries].sort((a, b) => b.net - a.net)[0] }));
   app.innerHTML = `
+    ${emailBanner()}
     <div id="eventsBox">${eventsHTML()}</div>
 
     ${D.lobby.notes ? `<div class="card"><details open><summary style="font-weight:700;font-size:16px">📜 House rules</summary><div style="white-space:pre-wrap;margin-top:8px;font-size:14.5px">${esc(D.lobby.notes)}</div></details></div>` : ''}
@@ -498,6 +550,7 @@ function portfolioPage() {
   }
   const mine = D.events.filter(e => e.joined);
   app.innerHTML = `
+    ${emailBanner()}
     <div class="card"><div class="row" style="gap:16px;flex-wrap:nowrap">
       <div class="avatar">${esc((D.user.name || '?').trim()[0].toUpperCase())}</div>
       <div><div style="font-size:20px;font-weight:700">${esc(D.user.name)}</div>
@@ -542,10 +595,11 @@ function portfolioPage() {
 function managePage() {
   const nameOf = id => (D.members.find(x => x.id === id) || {}).name || 'Removed player';
   app.innerHTML = `
+    <div id="pendingBox">${pendingHTML()}</div>
     <div class="card"><div class="row" style="justify-content:space-between"><b>Invite players</b>
       <div class="row"><span class="mute">Lobby code</span><span class="code">${D.lobby.code}</span><button class="ghost sm" id="cp">Copy code</button><button class="ghost sm" id="wa">💬 WhatsApp</button><button class="sm" id="sh">Share</button></div></div>
-      <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account” and enter the code.</p>
-      <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">@${esc(x.username)}</span>${x.id !== D.lobby.hostId ? ` <a href="#" title="Reset password" onclick="resetPw('${x.id}','${esc(x.name).replace(/'/g, '')}');return false">🔑</a> <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div>
+      <p class="mute" style="margin:10px 0 0;font-size:13px">Friends open this app, tap “Create account”, enter the code and confirm their email. You then approve them above.</p>
+      <div class="row" style="margin-top:12px">${D.members.map(x => `<span class="stat" style="padding:6px 10px">${esc(x.name)} <span class="mute">${esc((D.contacts || {})[x.id] || '')}</span>${x.id !== D.lobby.hostId ? ` <a href="#" title="Reset password" onclick="resetPw('${x.id}','${esc(x.name).replace(/'/g, '')}');return false">🔑</a> <a href="#" onclick="rmMember('${x.id}');return false" class="loss">✕</a>` : ''}</span>`).join('')}</div>
       <div class="mute" style="font-size:12px;margin-top:8px">🔑 resets a player's password if they forget it.</div></div>
 
     <div class="card"><h2>📜 House rules &amp; notes</h2><div class="mute" style="font-size:13px;margin:-6px 0 10px">Everyone in the lobby sees this on the Home page: blinds, buy-in rules, snacks, anything.</div>
@@ -646,6 +700,39 @@ function sessionForm(s) {
 function editSession(sid) { sessionForm(D.sessions.find(x => x.id === sid)); $('#formTitle').scrollIntoView({ behavior: 'smooth' }); }
 async function delSession(sid) { if (await askConfirm('Delete this game? It disappears from everyone\'s history.', { ok: 'Delete game' })) { await api('DELETE', '/api/sessions/' + sid); toast('Game deleted'); dashboard(); } }
 async function rmMember(u) { if (await askConfirm('Remove this player? Their past games stop counting.', { ok: 'Remove player' })) { await api('DELETE', '/api/members/' + u); dashboard(); } }
+
+// ---------- older accounts: add and confirm an email ----------
+async function addEmailFlow() {
+  const v = await openDialog({ title: 'Add your email', text: 'So you can sign in with it and reset your password if you forget it. We\'ll send a 6-digit code to confirm.', fields: [{ id: 'e', label: 'Email', type: 'email' }], ok: 'Send code' });
+  if (!v) return;
+  let r; try { r = await api('POST', '/api/me/email/start', { email: v.e }); } catch (e) { return toast(e.message, 'err'); }
+  const w = await openDialog({ title: 'Enter the code', text: `We emailed a code to <b>${esc(r.email)}</b>.${r.devCode ? ` <span class="warn" style="display:inline-block;margin-top:6px">Test mode code: ${r.devCode}</span>` : ''}`, fields: [{ id: 'otp', label: '6-digit code' }], ok: 'Confirm email' });
+  if (!w) return;
+  try { await api('POST', '/api/me/email/verify', { pendingId: r.pendingId, otp: w.otp }); toast('Email added ✓'); route(); } catch (e) { toast(e.message, 'err'); }
+}
+const emailBanner = () => (D.user && !D.user.hasEmail && D.emailReady) ? `<div class="card" style="border-color:var(--gold)"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><div><b>📧 Add your email</b><div class="mute" style="font-size:13px">Sign in with it and reset your password if you ever forget it.</div></div><button class="sm" onclick="addEmailFlow()">Add email</button></div></div>` : '';
+
+// ---------- host: pending approvals ----------
+const pendingHTML = () => (D.pending && D.pending.length) ? `<div class="card" style="border-color:var(--gold)"><h2>🛎️ Waiting for your approval (${D.pending.length})</h2><div class="mute" style="font-size:13px;margin:-6px 0 10px">These people verified their email and entered your lobby code.</div>
+  ${D.pending.map(p => `<div class="owe" style="margin-bottom:6px"><div class="names"><b>${esc(p.name)}</b><div class="mute" style="font-size:12.5px">${esc(p.email)}</div></div><button class="sm" onclick="decide('${p.id}',true)">Approve</button><button class="danger sm" onclick="decide('${p.id}',false)">Decline</button></div>`).join('')}</div>` : '';
+async function decide(id, yes) {
+  const who = (D.pending.find(x => x.id === id) || {}).name || 'this person';
+  if (!yes && !(await askConfirm(`Decline ${who}? Their account is deleted.`, { ok: 'Decline' }))) return;
+  try { await api('POST', `/api/members/${id}/${yes ? 'approve' : 'decline'}`); toast(yes ? `${who} is in ✓` : `${who} declined`); route(); } catch (e) { toast(e.message, 'err'); }
+}
+
+// ---------- new member waiting for the host ----------
+let pendTimer = null;
+function pendingView() {
+  clearInterval(pendTimer);
+  $('#nav').innerHTML = '';
+  app.innerHTML = `<div class="card" style="max-width:520px;margin:6vh auto;text-align:center;padding:28px 22px"><div style="font-size:44px">⏳</div><h2 style="font-size:22px;margin:6px 0">You're almost in${me ? ', ' + esc(me.name) : ''}</h2>
+    <p class="mute">Your email is confirmed. The host just needs to approve you, then the lobby opens up. This page checks automatically.</p>
+    <div class="row" style="justify-content:center"><button id="pchk">Check now</button><button class="ghost" onclick="logout()">Log out</button></div><p class="err" id="perr"></p></div>`;
+  const check = async () => { try { await api('GET', '/api/home'); clearInterval(pendTimer); toast("You're in! Welcome 🎉"); route(); } catch (e) { if (e.message !== 'PENDING') { clearInterval(pendTimer); route(); } } };
+  $('#pchk').onclick = async () => { await check(); if (document.getElementById('perr')) $('#perr').textContent = 'Not approved yet. Hang tight!'; };
+  pendTimer = setInterval(check, 10000);
+}
 
 // ---------- cash out (leave the table early) ----------
 async function cashOut(id, u) {
@@ -900,10 +987,14 @@ async function pollTick() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearTimeout(pollT); pollTick(); } });
 async function onRemoteChange() {
   const a = document.activeElement;
-  if (document.querySelector('.modal') || (a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) || document.querySelector('[id^="settle-"] table') || currentPage() === 'manage') return;
+  if (document.querySelector('.modal')) return;
   const prev = D, nd = await api('GET', '/api/home');
   if (JSON.stringify(nd) === JSON.stringify(prev)) return;
   D = nd;
+  if (nd.isSuper && (nd.pending || []).length > ((prev.pending || []).length)) { const who = nd.pending.find(p => !(prev.pending || []).some(q => q.id === p.id)); toast(`${who ? who.name : 'Someone'} wants to join your lobby`, 'ok', { label: 'Review', fn: () => { location.hash = '#/manage'; } }); }
+  renderNav();
+  if (currentPage() === 'manage') { const pb = document.getElementById('pendingBox'); if (pb) pb.innerHTML = pendingHTML(); return; }   // never disturb the host's forms
+  if ((a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) || document.querySelector('[id^="settle-"] table')) return;
   const hadLive = prev.events.some(e => e.status === 'live'), hasLive = nd.events.some(e => e.status === 'live');
   const known = new Set(prev.nights.map(n => n.id)), fresh = nd.nights.find(n => !known.has(n.id));
   renderPage();
