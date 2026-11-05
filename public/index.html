@@ -83,9 +83,6 @@
   .chip { position:absolute; width:58px; height:58px; border-radius:50%; border:5px dashed rgba(255,255,255,.85); box-shadow:inset 0 0 0 5px rgba(0,0,0,.25), 0 8px 16px rgba(0,0,0,.4); animation:floaty 5s ease-in-out infinite; }
   .chip.a { background:#c8312f; left:318px; top:96px; } .chip.b { background:#1f6f43; left:366px; top:58px; animation-delay:-1.5s; } .chip.c { background:#2a3f9c; left:340px; top:132px; animation-delay:-3s; }
   @keyframes floaty { 50% { translate:0 -9px; } }
-  .lp-auth { position:relative; } .lp-auth .card { margin:0; padding:22px; box-shadow:0 20px 50px rgba(0,0,0,.45); border-color:#2f5442; }
-  .lp-auth h2 { font-size:22px; margin:0 0 4px; } .lp-auth .sub { color:var(--mute); font-size:14px; margin-bottom:16px; }
-  .lp-auth input:not([type=checkbox]) { margin-bottom:10px; }
   .lp-section { padding:34px 0; } .lp-section > h2 { font-size:clamp(24px,3.4vw,34px); letter-spacing:-.6px; margin:0 0 6px; text-align:center; }
   .lp-section > p.lead { text-align:center; color:var(--mute); margin:0 auto 26px; max-width:560px; }
   .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; counter-reset:st; }
@@ -99,8 +96,21 @@
   .mock { background:#0f1a14; border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 18px 40px rgba(0,0,0,.4); }
   .mock .big { font-size:34px; font-weight:800; color:var(--win); letter-spacing:-1px; }
   .lp-foot { text-align:center; color:var(--mute); font-size:13px; padding:30px 0 40px; border-top:1px solid var(--line); margin-top:30px; }
-  @media (max-width:860px) { .lp-hero { grid-template-columns:1fr; } .lp-stage { display:none; } .lp-preview { grid-template-columns:1fr; padding:20px; } .lp-auth { order:-1; } .lp-hero > div:first-child { order:2; } }
+  @media (max-width:860px) { .lp-hero { grid-template-columns:1fr; padding-top:6px; } .lp-preview { grid-template-columns:1fr; padding:20px; } }
   @media (prefers-reduced-motion:reduce) { .pcard, .chip { animation:none; } .feat { transition:none; } }
+  .lp-art { position:relative; height:300px; display:flex; align-items:center; justify-content:flex-end; overflow:visible; }
+  .lp-art .lp-stage { margin:0; transform:scale(1.12); transform-origin:right center; width:430px; max-width:100%; height:200px; }
+  .lp-top .btns { display:flex; gap:8px; }
+  .modal { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(5,10,8,.72); backdrop-filter:blur(5px); animation:fadein .15s ease-out; overflow-y:auto; }
+  .modal-card { position:relative; width:100%; max-width:420px; background:var(--card); border:1px solid #2f5442; border-radius:18px; padding:26px 24px 22px; box-shadow:0 30px 80px rgba(0,0,0,.6); animation:popin .2s ease-out; margin:auto; }
+  .modal-card h2 { font-size:22px; margin:0 0 4px; } .modal-card .sub { color:var(--mute); font-size:14px; margin-bottom:16px; }
+  .modal-card input:not([type=checkbox]) { margin-bottom:10px; }
+  .modal-x { position:absolute; top:10px; right:10px; width:32px; height:32px; padding:0; border-radius:50%; background:transparent; color:var(--mute); border:1px solid var(--line); font-size:18px; line-height:1; }
+  .modal-x:hover { color:var(--text); border-color:var(--mute); }
+  @keyframes fadein { from { opacity:0; } } @keyframes popin { from { opacity:0; transform:translateY(10px) scale(.97); } }
+  body.modal-open { overflow:hidden; }
+  @media (max-width:860px) { .lp-art { display:none; } }
+  @media (prefers-reduced-motion:reduce) { .modal, .modal-card { animation:none; } }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
@@ -144,43 +154,27 @@ async function route() {
 const dashboard = () => route();
 window.addEventListener('hashchange', route);
 
-// ---------- landing + sign in / create account ----------
-async function loginView(mode = 'login') {
+// ---------- landing page; sign in / create account open as a pop-up ----------
+let LP = { hasLobby: false, lobbyName: null };
+async function loginView(mode, openModal) {
   document.body.classList.add('landing');
-  const reg = mode === 'register';
-  let st = { hasLobby: false, lobbyName: null };
-  try { st = await api('GET', '/api/status'); } catch {}
-  const lobby = st.hasLobby ? esc(st.lobbyName) : null;
-  const title = reg ? (lobby ? `Join ${lobby}` : 'Start your lobby') : 'Welcome back';
-  const sub = reg ? (lobby ? 'Create your account with the lobby code your host shared.' : "You're first here, so you'll be the host.") : 'Sign in to see your portfolio and the next game.';
+  document.getElementById('authModal')?.remove(); document.body.classList.remove('modal-open');
+  try { LP = await api('GET', '/api/status'); } catch {}
   app.innerHTML = `
     <div class="lp-top"><div class="lp-logo">♠ Poker <span>Hissab</span></div>
-      <button class="ghost sm" id="topsw">${reg ? 'Sign in' : 'Create account'}</button></div>
+      <div class="btns"><button class="ghost sm" id="topin">Sign in</button><button class="sm" id="topup">Create account</button></div></div>
 
     <section class="lp-hero">
       <div>
         <span class="lp-eyebrow">♠ ♥ ♣ ♦ &nbsp;Your home game, handled</span>
         <h1>Every hand played. <em>Every dollar</em> accounted for.</h1>
         <p class="lp-sub">Run poker night like a pro: schedule games with minimum buy-ins, track the live pot, climb the leaderboard, and see exactly who owes whom, no more screenshots of napkin math.</p>
-        <div class="lp-cta"><button id="cta1">${reg ? 'Create my account' : 'Get started free'}</button><button class="ghost" id="cta2">${reg ? 'I already have an account' : 'I have an account'}</button></div>
+        <div class="lp-cta"><button id="cta1">Get started free</button><button class="ghost" id="cta2">I have an account</button></div>
         <div class="lp-trust"><span>🃏 <b>Live</b> session tracker</span><span>💸 <b>Instant</b> settle-up</span><span>📈 <b>Personal</b> portfolio</span></div>
-        <div class="lp-stage" aria-hidden="true">
-          <div class="pcard c1">A<i>♠</i><b>A</b></div><div class="pcard c2 r">K<i>♥</i><b>K</b></div><div class="pcard c3">Q<i>♣</i><b>Q</b></div>
-          <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span></div>
       </div>
-
-      <div class="lp-auth"><div class="card">
-        <h2>${title}</h2><div class="sub">${sub}</div>
-        ${reg ? `<input id="name" placeholder="Your name" autocomplete="name">` : ''}
-        <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
-        <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
-        <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
-        ${reg ? (st.hasLobby
-          ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">`
-          : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
-        <button style="width:100%;padding:12px" id="go">${reg ? (lobby ? 'Join the lobby' : 'Create lobby & account') : 'Sign in'}</button><p class="err" id="err"></p>
-        <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
-      </div></div>
+      <div class="lp-art" aria-hidden="true"><div class="lp-stage">
+        <div class="pcard c1">A<i>♠</i><b>A</b></div><div class="pcard c2 r">K<i>♥</i><b>K</b></div><div class="pcard c3">Q<i>♣</i><b>Q</b></div>
+        <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span></div></div>
     </section>
 
     <section class="lp-section"><h2>Up and running in three steps</h2><p class="lead">No spreadsheets. No group-chat arguments.</p>
@@ -208,22 +202,50 @@ async function loginView(mode = 'login') {
         <div class="feat"><span class="ic">🔒</span><b>Private by design</b><span>Invite-only lobby. Hashed passwords, and the host can back up everything.</span></div></div></section>
 
     <footer class="lp-foot">♠ Poker Hissab · Play the cards, we'll keep the books.</footer>`;
+  $('#topin').onclick = $('#cta2').onclick = () => openAuth('login');
+  $('#topup').onclick = $('#cta1').onclick = () => openAuth('register');
+  if (openModal) openAuth(mode || 'login');
+}
 
-  const swap = e => { e && e.preventDefault(); loginView(reg ? 'login' : 'register'); window.scrollTo(0, 0); };
-  $('#sw').onclick = swap; $('#topsw').onclick = swap; $('#cta2').onclick = swap;
-  $('#cta1').onclick = () => { if (reg) { $('#name').focus(); } else { loginView('register'); } window.scrollTo({ top: 0, behavior: 'smooth' }); };
+function closeAuth() { document.getElementById('authModal')?.remove(); document.body.classList.remove('modal-open'); document.removeEventListener('keydown', authKeys); }
+const authKeys = e => { if (e.key === 'Escape') closeAuth(); };
+function openAuth(mode) {
+  document.getElementById('authModal')?.remove();
+  const reg = mode === 'register', lobby = LP.hasLobby ? esc(LP.lobbyName) : null;
+  const title = reg ? (lobby ? `Join ${lobby}` : 'Start your lobby') : 'Welcome back';
+  const sub = reg ? (lobby ? 'Create your account with the lobby code your host shared.' : "You're first here, so you'll be the host.") : 'Sign in to see your portfolio and the next game.';
+  const m = document.createElement('div');
+  m.id = 'authModal'; m.className = 'modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+  m.innerHTML = `<div class="modal-card">
+    <button class="modal-x" id="mx" aria-label="Close">✕</button>
+    <h2>${title}</h2><div class="sub">${sub}</div>
+    ${reg ? `<input id="name" placeholder="Your name" autocomplete="name">` : ''}
+    <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
+    <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
+    <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
+    ${reg ? (LP.hasLobby
+      ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">`
+      : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
+    <button style="width:100%;padding:12px" id="go">${reg ? (lobby ? 'Join the lobby' : 'Create lobby & account') : 'Sign in'}</button><p class="err" id="err"></p>
+    <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
+  </div>`;
+  document.body.appendChild(m); document.body.classList.add('modal-open');
+  m.addEventListener('mousedown', e => { if (e.target === m) closeAuth(); });
+  document.addEventListener('keydown', authKeys);
+  $('#mx').onclick = closeAuth;
+  $('#sw').onclick = e => { e.preventDefault(); openAuth(reg ? 'login' : 'register'); };
   $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
   const go = async () => {
     try {
       const body = { username: $('#user').value, password: $('#pw').value };
       if (reg) { body.name = $('#name').value; if ($('#code')) body.code = $('#code').value; if ($('#lobbyName')) body.lobbyName = $('#lobbyName').value; }
       const r = await api('POST', reg ? '/api/register' : '/api/login', body);
-      token = r.token; me = r.user; localStorage.setItem('token', token); route();
+      token = r.token; me = r.user; localStorage.setItem('token', token); closeAuth(); route();
     } catch (e) { setErr(e.message); }
   };
   $('#go').onclick = go;
   $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
-  (reg ? $('#name') : $('#user')).focus({ preventScroll: true });
+  (reg ? $('#name') : $('#user')).focus();
 }
 
 // ---------- chart: cumulative profit/loss by night ----------
