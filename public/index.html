@@ -64,6 +64,43 @@
   .owe.me { border-color:#6b5513; } .owe .arrow { color:var(--accent); font-weight:700; } .owe .amt { margin-left:auto; font-weight:700; font-size:16px; }
   .owe .names { flex:1 1 180px; min-width:0; word-break:break-word; }
   .summary { padding:12px 14px; border-radius:12px; margin-bottom:12px; font-weight:600; background:#0f1a14; border:1px solid var(--line); }
+  /* ---------- landing ---------- */
+  .landing > header, .landing > nav#nav { display:none; }
+  .landing main { max-width:1100px; padding-top:0; }
+  .lp-top { display:flex; align-items:center; justify-content:space-between; padding:18px 0; }
+  .lp-logo { font-size:20px; font-weight:700; } .lp-logo span { color:var(--accent); }
+  .lp-hero { display:grid; grid-template-columns:1.15fr .85fr; gap:36px; align-items:center; padding:20px 0 40px; }
+  .lp-eyebrow { display:inline-block; padding:5px 12px; border:1px solid #6b5513; border-radius:999px; color:var(--accent); font-size:13px; font-weight:600; background:#1e1a0a; }
+  .lp-hero h1 { font-size:clamp(34px,5.2vw,56px); line-height:1.04; letter-spacing:-1.5px; margin:16px 0 14px; }
+  .lp-hero h1 em { font-style:normal; background:linear-gradient(90deg,var(--accent),#ff9f5a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lp-sub { color:var(--mute); font-size:17px; max-width:520px; margin:0 0 22px; }
+  .lp-cta { display:flex; gap:10px; flex-wrap:wrap; } .lp-cta button { padding:12px 22px; font-size:16px; }
+  .lp-trust { display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; color:var(--mute); font-size:13px; } .lp-trust b { color:var(--text); }
+  .lp-stage { position:relative; height:200px; margin-top:26px; max-width:520px; }
+  .pcard { position:absolute; width:104px; height:148px; border-radius:12px; background:#f7f3e8; color:#1a1a1a; box-shadow:0 14px 30px rgba(0,0,0,.45); display:flex; flex-direction:column; justify-content:space-between; padding:8px 10px; font-weight:800; font-size:22px; line-height:1; animation:floaty 6s ease-in-out infinite; }
+  .pcard.r { color:#c8312f; } .pcard i { font-style:normal; font-size:46px; align-self:center; } .pcard b { align-self:flex-end; transform:rotate(180deg); }
+  .pcard.c1 { left:10px; top:34px; transform:rotate(-14deg); } .pcard.c2 { left:96px; top:14px; transform:rotate(-2deg); animation-delay:-2s; } .pcard.c3 { left:182px; top:30px; transform:rotate(11deg); animation-delay:-4s; }
+  .chip { position:absolute; width:58px; height:58px; border-radius:50%; border:5px dashed rgba(255,255,255,.85); box-shadow:inset 0 0 0 5px rgba(0,0,0,.25), 0 8px 16px rgba(0,0,0,.4); animation:floaty 5s ease-in-out infinite; }
+  .chip.a { background:#c8312f; left:318px; top:96px; } .chip.b { background:#1f6f43; left:366px; top:58px; animation-delay:-1.5s; } .chip.c { background:#2a3f9c; left:340px; top:132px; animation-delay:-3s; }
+  @keyframes floaty { 50% { translate:0 -9px; } }
+  .lp-auth { position:relative; } .lp-auth .card { margin:0; padding:22px; box-shadow:0 20px 50px rgba(0,0,0,.45); border-color:#2f5442; }
+  .lp-auth h2 { font-size:22px; margin:0 0 4px; } .lp-auth .sub { color:var(--mute); font-size:14px; margin-bottom:16px; }
+  .lp-auth input:not([type=checkbox]) { margin-bottom:10px; }
+  .lp-section { padding:34px 0; } .lp-section > h2 { font-size:clamp(24px,3.4vw,34px); letter-spacing:-.6px; margin:0 0 6px; text-align:center; }
+  .lp-section > p.lead { text-align:center; color:var(--mute); margin:0 auto 26px; max-width:560px; }
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; counter-reset:st; }
+  .step { position:relative; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 18px 18px; counter-increment:st; }
+  .step::before { content:counter(st); position:absolute; top:-14px; left:16px; width:30px; height:30px; border-radius:50%; background:var(--accent); color:#1b1500; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .step b { display:block; margin-bottom:4px; font-size:16px; } .step span { color:var(--mute); font-size:14px; }
+  .feats { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+  .feat { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; transition:transform .2s, border-color .2s; } .feat:hover { transform:translateY(-3px); border-color:#6b5513; }
+  .feat .ic { font-size:28px; display:block; margin-bottom:8px; } .feat b { display:block; margin-bottom:4px; } .feat span { color:var(--mute); font-size:14px; }
+  .lp-preview { display:grid; grid-template-columns:1fr 1fr; gap:26px; align-items:center; background:linear-gradient(135deg,#17261d,#13201a); border:1px solid var(--line); border-radius:22px; padding:28px; }
+  .mock { background:#0f1a14; border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 18px 40px rgba(0,0,0,.4); }
+  .mock .big { font-size:34px; font-weight:800; color:var(--win); letter-spacing:-1px; }
+  .lp-foot { text-align:center; color:var(--mute); font-size:13px; padding:30px 0 40px; border-top:1px solid var(--line); margin-top:30px; }
+  @media (max-width:860px) { .lp-hero { grid-template-columns:1fr; } .lp-stage { display:none; } .lp-preview { grid-template-columns:1fr; padding:20px; } .lp-auth { order:-1; } .lp-hero > div:first-child { order:2; } }
+  @media (prefers-reduced-motion:reduce) { .pcard, .chip { animation:none; } .feat { transition:none; } }
   details summary { cursor:pointer; padding:8px 0; }
 </style>
 </head>
@@ -95,6 +132,7 @@ async function route() {
   if (token && !me) { try { me = (await api('GET', '/api/me')).user; } catch { token = null; } }
   $('#who').innerHTML = me ? `${esc(me.name)} ${me.role === 'super' ? '<span class="pill">super user</span>' : ''} <button class="ghost sm" onclick="logout()">Log out</button>` : '';
   if (!me) { $('#nav').innerHTML = ''; return loginView(); }
+  document.body.classList.remove('landing');
   const h = location.hash;
   const page = h.startsWith('#/portfolio') ? 'portfolio' : (h.startsWith('#/manage') && me.role === 'super') ? 'manage' : 'home';
   $('#nav').innerHTML = [['home', '#/', 'Home'], ['portfolio', '#/portfolio', 'My Portfolio'], ...(me.role === 'super' ? [['manage', '#/manage', 'Manage']] : [])]
@@ -106,23 +144,74 @@ async function route() {
 const dashboard = () => route();
 window.addEventListener('hashchange', route);
 
-// ---------- sign in / create account ----------
+// ---------- landing + sign in / create account ----------
 async function loginView(mode = 'login') {
+  document.body.classList.add('landing');
   const reg = mode === 'register';
-  const st = reg ? await api('GET', '/api/status') : null;
-  app.innerHTML = `<div class="card login">
-    <h2 style="text-align:center;font-size:20px">${reg ? 'Create account' : 'Sign in'}</h2>
-    ${reg ? `<input id="name" placeholder="Your name">` : ''}
-    <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
-    <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
-    <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
-    ${reg ? (st.hasLobby
-      ? `<input id="code" placeholder="Lobby code (from the super user)" style="text-transform:uppercase" autocapitalize="characters" autocomplete="off">`
-      : `<div class="warn" style="margin:0 0 10px">You're the first one here, so you'll be the <b>super user</b> and set up the lobby.</div><input id="lobbyName" placeholder="Lobby name (e.g. Friday Night Poker)">`) : ''}
-    <button style="width:100%" id="go">${reg ? 'Create account' : 'Sign in'}</button><p class="err" id="err"></p>
-    <p class="mute" style="text-align:center;font-size:14px;margin-bottom:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
-  </div>`;
-  $('#sw').onclick = e => { e.preventDefault(); loginView(reg ? 'login' : 'register'); };
+  let st = { hasLobby: false, lobbyName: null };
+  try { st = await api('GET', '/api/status'); } catch {}
+  const lobby = st.hasLobby ? esc(st.lobbyName) : null;
+  const title = reg ? (lobby ? `Join ${lobby}` : 'Start your lobby') : 'Welcome back';
+  const sub = reg ? (lobby ? 'Create your account with the lobby code your host shared.' : "You're first here, so you'll be the host.") : 'Sign in to see your portfolio and the next game.';
+  app.innerHTML = `
+    <div class="lp-top"><div class="lp-logo">♠ Poker <span>Hissab</span></div>
+      <button class="ghost sm" id="topsw">${reg ? 'Sign in' : 'Create account'}</button></div>
+
+    <section class="lp-hero">
+      <div>
+        <span class="lp-eyebrow">♠ ♥ ♣ ♦ &nbsp;Your home game, handled</span>
+        <h1>Every hand played. <em>Every dollar</em> accounted for.</h1>
+        <p class="lp-sub">Run poker night like a pro: schedule games with minimum buy-ins, track the live pot, climb the leaderboard, and see exactly who owes whom, no more screenshots of napkin math.</p>
+        <div class="lp-cta"><button id="cta1">${reg ? 'Create my account' : 'Get started free'}</button><button class="ghost" id="cta2">${reg ? 'I already have an account' : 'I have an account'}</button></div>
+        <div class="lp-trust"><span>🃏 <b>Live</b> session tracker</span><span>💸 <b>Instant</b> settle-up</span><span>📈 <b>Personal</b> portfolio</span></div>
+        <div class="lp-stage" aria-hidden="true">
+          <div class="pcard c1">A<i>♠</i><b>A</b></div><div class="pcard c2 r">K<i>♥</i><b>K</b></div><div class="pcard c3">Q<i>♣</i><b>Q</b></div>
+          <span class="chip a"></span><span class="chip b"></span><span class="chip c"></span></div>
+      </div>
+
+      <div class="lp-auth"><div class="card">
+        <h2>${title}</h2><div class="sub">${sub}</div>
+        ${reg ? `<input id="name" placeholder="Your name" autocomplete="name">` : ''}
+        <input id="user" placeholder="Username" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username">
+        <input id="pw" type="password" placeholder="Password" autocomplete="${reg ? 'new-password' : 'current-password'}">
+        <label class="mute" style="display:block;margin:-2px 0 12px;font-size:13px"><input type="checkbox" id="showpw"> Show password</label>
+        ${reg ? (st.hasLobby
+          ? `<input id="code" placeholder="Lobby code" style="text-transform:uppercase;letter-spacing:2px" autocapitalize="characters" autocomplete="off">`
+          : `<input id="lobbyName" placeholder="Name your lobby (e.g. Friday Night Poker)">`) : ''}
+        <button style="width:100%;padding:12px" id="go">${reg ? (lobby ? 'Join the lobby' : 'Create lobby & account') : 'Sign in'}</button><p class="err" id="err"></p>
+        <p class="mute" style="text-align:center;font-size:14px;margin:0">${reg ? 'Already have an account?' : 'New here?'} <a href="#" id="sw" style="color:var(--accent)">${reg ? 'Sign in' : 'Create account'}</a></p>
+      </div></div>
+    </section>
+
+    <section class="lp-section"><h2>Up and running in three steps</h2><p class="lead">No spreadsheets. No group-chat arguments.</p>
+      <div class="steps">
+        <div class="step"><b>Start a lobby</b><span>The first person to sign up becomes the host and gets a private lobby code.</span></div>
+        <div class="step"><b>Invite your table</b><span>Friends create an account with the code. Only people you invite can join.</span></div>
+        <div class="step"><b>Play, record, settle</b><span>Log the night, and everyone's balance and who-owes-whom update automatically.</span></div></div></section>
+
+    <section class="lp-section"><div class="lp-preview">
+      <div><h2 style="text-align:left;margin:0 0 8px;font-size:clamp(22px,3vw,30px)">Your own poker portfolio</h2>
+        <p style="color:var(--mute);margin:0 0 14px">Overall earnings, a running bankroll chart, win rate, streaks, best and worst nights, and badges to earn. Every player gets one.</p>
+        <div class="lp-trust" style="margin:0"><span>🏅 Badges</span><span>🔥 Streaks</span><span>📊 Win rate</span></div></div>
+      <div class="mock"><div class="mute" style="font-size:12px">OVERALL EARNINGS · SAMPLE</div><div class="big">+$1,240</div>
+        <svg viewBox="0 0 320 110" style="width:100%;display:block;margin-top:6px" aria-hidden="true"><defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#4ade80" stop-opacity=".35"/><stop offset="1" stop-color="#4ade80" stop-opacity="0"/></linearGradient></defs>
+          <path d="M0,70 L50,84 L100,56 L150,48 L200,40 L250,22 L320,8 L320,100 L0,100 Z" fill="url(#g)"/><path d="M0,70 L50,84 L100,56 L150,48 L200,40 L250,22 L320,8" fill="none" stroke="#4ade80" stroke-width="3" stroke-linejoin="round"/></svg>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="fd w">+$340</span><span class="fd w">+$60</span><span class="fd l">-$150</span><span class="fd w">+$450</span><span class="fd w">+$220</span></div></div></div></section>
+
+    <section class="lp-section"><h2>Built for the way you actually play</h2><p class="lead">Everything a home game needs, nothing it doesn't.</p>
+      <div class="feats">
+        <div class="feat"><span class="ic">🔴</span><b>Live session</b><span>A pulsing live card shows the pot, who's in, and lets players join late.</span></div>
+        <div class="feat"><span class="ic">🎟️</span><b>Minimum buy-ins</b><span>Set a minimum for each game. Nobody can join below it.</span></div>
+        <div class="feat"><span class="ic">🏆</span><b>Leaderboard & podium</b><span>See who's running hot, with win rates and totals for the whole lobby.</span></div>
+        <div class="feat"><span class="ic">💸</span><b>Who owes whom</b><span>The fewest payments to square everyone up, and mark them paid as they happen.</span></div>
+        <div class="feat"><span class="ic">📅</span><b>Upcoming events</b><span>Schedule the next night with date, place and seats. Players tap to join.</span></div>
+        <div class="feat"><span class="ic">🔒</span><b>Private by design</b><span>Invite-only lobby. Hashed passwords, and the host can back up everything.</span></div></div></section>
+
+    <footer class="lp-foot">♠ Poker Hissab · Play the cards, we'll keep the books.</footer>`;
+
+  const swap = e => { e && e.preventDefault(); loginView(reg ? 'login' : 'register'); window.scrollTo(0, 0); };
+  $('#sw').onclick = swap; $('#topsw').onclick = swap; $('#cta2').onclick = swap;
+  $('#cta1').onclick = () => { if (reg) { $('#name').focus(); } else { loginView('register'); } window.scrollTo({ top: 0, behavior: 'smooth' }); };
   $('#showpw').onchange = e => $('#pw').type = e.target.checked ? 'text' : 'password';
   const go = async () => {
     try {
@@ -134,7 +223,7 @@ async function loginView(mode = 'login') {
   };
   $('#go').onclick = go;
   $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
-  (reg ? $('#name') : $('#user')).focus();
+  (reg ? $('#name') : $('#user')).focus({ preventScroll: true });
 }
 
 // ---------- chart: cumulative profit/loss by night ----------
