@@ -445,7 +445,7 @@ function rivalryCard() {
 function oweRow(t, sup) {
   const meIn = t.from === D.user.id || t.to === D.user.id;
   const who = t.from === D.user.id ? '<b>You</b>' : esc(t.fromName), whom = t.to === D.user.id ? '<b>you</b>' : esc(t.toName);
-  return `<div class="owe ${meIn ? 'me' : ''}"><div class="names">${who} <span class="arrow">owes</span> ${whom}</div><span class="amt">${money(t.amount)}</span>
+  return `<div class="owe ${meIn ? 'me' : ''}"><div class="names">${who} <span class="arrow">${t.from === D.user.id ? 'owe' : 'owes'}</span> ${whom}</div><span class="amt">${money(t.amount)}</span>
     ${sup ? `<button class="ghost sm" onclick="markPaid('${t.from}','${t.to}',${t.amount})">Mark paid</button>` : ''}</div>`;
 }
 function oweSummary() {
