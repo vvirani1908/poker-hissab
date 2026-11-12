@@ -243,7 +243,7 @@ route('POST', '/api/members/:id/approve', ({ user, params }) => {
 route('POST', '/api/members/:id/decline', ({ user, params }) => {
   const l = needSuper(user);
   if (!(l.pending || []).includes(params.id)) throw new HttpError(404, 'No such request');
-  l.pending = l.pending.filter(x => x !== params.id); db.users = db.users.filter(u => u.id !== params.id); revokeTokens(params.id, null); save();
+  l.pending = l.pending.filter(x => x !== params.id); db.users = db.users.filter(u => u.id !== params.id); db.payments = (db.payments || []).filter(p => p.from !== params.id && p.to !== params.id); revokeTokens(params.id, null); save();
   return { ok: true };
 }, 'any');
 
@@ -347,7 +347,8 @@ route('POST', '/api/restore', ({ user, body }) => {
 route('DELETE', '/api/members/:uid', ({ user, params }) => {
   const l = needSuper(user);
   if (params.uid === l.ownerId) throw new HttpError(400, 'Super user cannot be removed');
-  l.members = l.members.filter(m => m !== params.uid); save();
+  l.members = l.members.filter(m => m !== params.uid);
+  db.payments = (db.payments || []).filter(p => p.from !== params.uid && p.to !== params.uid); save();
   return { ok: true };
 }, 'any');
 
@@ -530,7 +531,8 @@ const round2 = n => Math.round(n * 100) / 100;
 function balancesFor(l) {
   const bal = {}; l.members.forEach(id => bal[id] = 0);
   for (const s of db.sessions) if (s.lobbyId === l.id) for (const e of s.entries) if (e.userId in bal) bal[e.userId] += e.cashOut - e.buyIn;
-  for (const p of (db.payments || [])) { if (p.from in bal) bal[p.from] += p.amount; if (p.to in bal) bal[p.to] -= p.amount; }
+  // A payment only counts while both people are in the lobby. Otherwise one side would be applied alone and the totals would skew.
+  for (const p of (db.payments || [])) { if (p.from in bal && p.to in bal) { bal[p.from] += p.amount; bal[p.to] -= p.amount; } }
   Object.keys(bal).forEach(k => bal[k] = round2(bal[k]));
   return bal;
 }
@@ -553,7 +555,7 @@ function oweView(l) {
   const name = id => (db.users.find(u => u.id === id) || {}).name || 'Removed player';
   const bal = balancesFor(l);
   const settlements = settleUp(bal).map(t => ({ ...t, fromName: name(t.from), toName: name(t.to) }));
-  const payments = (db.payments || []).filter(p => p.lobbyId === l.id).sort((a, b) => b.created - a.created).slice(0, 8)
+  const payments = (db.payments || []).filter(p => p.lobbyId === l.id && l.members.includes(p.from) && l.members.includes(p.to)).sort((a, b) => b.created - a.created).slice(0, 8)
     .map(p => ({ id: p.id, from: p.from, to: p.to, amount: p.amount, date: p.date, fromName: name(p.from), toName: name(p.to) }));
   return { settlements, payments, unaccounted: round2(Object.values(bal).reduce((a, v) => a + v, 0)) };
 }
